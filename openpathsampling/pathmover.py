@@ -19,6 +19,10 @@ from treelogic import TreeMixin
 logger = logging.getLogger(__name__)
 init_log = logging.getLogger('openpathsampling.initialization')
 
+def set_balance_partners(mover1, mover2):
+    mover1.balance_partner = mover2
+    mover2.balance_partner = mover1
+
 # TODO: Remove if really not used anymore otherwise might move to utils or tools
 def make_list_of_pairs(l):
     """
@@ -101,6 +105,7 @@ class PathMover(TreeMixin, OPSNamed):
         self._in_ensembles = None
         self._out_ensembles = None
         self._len = None
+        self.balance_partner = None
 
 #        initialization_logging(logger=init_log, obj=self,
 #                               entries=['ensembles'])
@@ -236,6 +241,13 @@ class PathMover(TreeMixin, OPSNamed):
         Default is the same as in_ensembles
         """
         return self._get_in_ensembles()
+
+    def check_balance_partner(self):
+        """Checks the correctness of the balance partner."""
+        if self.balance_partner is not None:
+            # balance partners come in pairs
+            assert(self.balance_partner.balance_partner == self)
+            # assert(type(self.balance_partner) == self._balance_partner_type)
 
     def legal_sample_set(self, globalstate, ensembles=None, replicas='all'):
         """
@@ -634,8 +646,6 @@ class BackwardShootMover(ShootMover):
         )
 
         return trial_point
-
-# TODO: This doubling might be superfluous
 
 
 
@@ -1774,19 +1784,28 @@ class OneWayShootingMover(RandomChoiceMover):
         Ensemble for this shooting mover
     """
     def __init__(self, ensemble, selector):
-        movers = [
-            ForwardShootMover(
-                ensemble=ensemble,
-                selector=selector
-            ),
-            BackwardShootMover(
-                ensemble=ensemble,
-                selector=selector
-            )
-        ]
-        super(OneWayShootingMover, self).__init__(
-            movers=movers
+        forward = ForwardShootMover(
+            ensemble=ensemble,
+            selector=selector
         )
+        backward = BackwardShootMover(
+            ensemble=ensemble,
+            selector=selector
+        )
+
+        super(OneWayShootingMover, self).__init__(
+            movers=[forward, backward]
+        )
+
+    def set_balance_partners(self):
+        bp = self.balance_partner
+        forward = self.movers[0]
+        backward = self.movers[1]
+        bp_forward = bp.movers[0]
+        bp_backward = bp.movers[1]
+        forward.balance_partner = bp_backward
+        backward.balance_partner = bp_forward
+
 
     @classmethod
     def from_dict(cls, dct):
@@ -1921,6 +1940,31 @@ class MinusMover(SubPathMover):
 
         super(MinusMover, self).__init__(mover)
 
+    def set_balance_partners(self):
+        bp = self.balance_partner
+        cond_seq = self.mover.mover
+        bp_cond_seq = bp.mover.mover
+        cond_seq.balance_partner = bp_cond_seq
+        subtraj = cond_seq.movers[0]
+        bp_subtraj = bp_cond_seq.movers[0]
+        repexs = cond_seq.movers[1]
+        bp_repexs = bp_cond_seq.movers[1]
+        extension = cond_seq.movers[2]
+        bp_extension = bp_cond_seq.movers[2]
+
+        self.mover.balance_partner = bp.mover.balance_partner
+        cond_seq.balance_partner = bp_cond_seq
+        subtraj[0].balance_partner = bp_extension[1]
+        subtraj[1].balance_partner = bp_extension[0]
+        subtraj.balance_partner = bp_extension
+        for (this, that) in zip(repexs, bp_repexs):
+            this.balance_partner = that
+        extension[0].balance_partner = bp_subtraj[1]
+        extension[1].balance_partner = bp_subtraj[0]
+        extension.balance_partner = bp_subtraj
+
+
+
 
 class PathSimulatorMover(SubPathMover):
     """
@@ -1941,9 +1985,6 @@ class PathSimulatorMover(SubPathMover):
             details=details
         )
 
-
-class MultipleSetMinusMover(RandomChoiceMover):
-    pass
 
 def NeighborEnsembleReplicaExchange(ensemble_list):
     movers = [
