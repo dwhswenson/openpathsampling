@@ -242,6 +242,20 @@ class PathMover(TreeMixin, OPSNamed):
         """
         return self._get_in_ensembles()
 
+
+    def probability_o_to_n(self, details):
+        raise NotImplementedError
+
+
+    def probability_n_to_o(self, details):
+        raise NotImplementedError
+
+
+    def probability_ratio(self, details):
+        return (self.probability_o_to_n(details) /
+                self.balance_partner.probability_n_to_o(details))
+
+
     def check_balance_partner(self):
         """Checks the correctness of the balance partner."""
         if self.balance_partner is not None:
@@ -856,6 +870,11 @@ class ReplicaExchangeMover(SampleMover):
 
         return [trial1, trial2]
 
+    def probability_o_to_n(self, details):
+        pass
+
+    def probability_n_to_o(self, details):
+        pass
 
 class StateSwapMover(SampleMover):
     def __init__(self, ensemble1, ensemble2, bias=None):
@@ -1534,6 +1553,16 @@ class SequentialMover(PathMover):
         return paths.SequentialPathMoveChange(pathmovechanges, mover=self)
 
 
+class SimultaneousMover(SequentialMover):
+    """
+    Performs each of the moves in its movers list. All its movers must be
+    independent, such that they can be run in parallel.
+
+    Currently implementation doesn't support parallel, but this does make a
+    difference for detailed balance.
+    """
+
+
 class PartialAcceptanceSequentialMover(SequentialMover):
     """
     Performs each move in its movers list until complete or until one is not
@@ -1830,9 +1859,9 @@ class OneWayShootingMover(RandomChoiceMover):
 class OneWayExtendMover(RandomChoiceMover):
     """
     OneWayShootingMover is a special case of a RandomChoiceMover which
-     gives a 50/50 chance of selecting either a ForwardExtendMover or
-    a BackwardExtendMover. Both submovers use the same same ensembles
-    and replicas.
+    gives a 50/50 chance of selecting either a ForwardExtendMover or a
+    BackwardExtendMover. Both submovers use the same same ensembles and
+    replicas.
 
     Attributes
     ----------
