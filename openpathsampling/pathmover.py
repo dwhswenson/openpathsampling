@@ -367,6 +367,27 @@ class SwappingMover(MoverType):
     A mover that swaps samples from ensembles in some way. Relevant for mixing
     """
 
+###############################################################################
+# ACCEPTORS 
+###############################################################################
+
+class MCAcceptor(PathMover):
+    def __init__(self, mover):
+        super(MCAcceptor, self).__init__()
+        self.mover = mover
+
+
+class MetropolisAcceptor(MCAcceptor):
+    def acceptance_probability(self, mc_change):
+        # TODO: once this works, then we can really do stuff!
+        acc_prob = 1.0
+        for trial_stage in mc_change:
+            details = trial_stage.details
+            mover = trail_stage.details.mover
+            acc_prob *= mover.probability_ratio(details)
+        
+        return acc_prob
+
 
 ###############################################################################
 # GENERATORS
