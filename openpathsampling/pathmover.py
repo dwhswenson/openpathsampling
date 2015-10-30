@@ -608,8 +608,7 @@ class ForwardShootMover(ShootMover):
                 paths.PrefixTrajectoryEnsemble(
                     ensemble,
                     shooting_point.trajectory[0:shooting_point.index]
-                ).can_append,
-                self.engine.max_length_stopper.can_append
+                ).can_append
             ]
         )
 
@@ -644,8 +643,7 @@ class BackwardShootMover(ShootMover):
                 paths.SuffixTrajectoryEnsemble(
                     ensemble,
                     shooting_point.trajectory[shooting_point.index + 1:]
-                ).can_prepend,
-                self.engine.max_length_stopper.can_append
+                ).can_prepend
             ]
         )
 
@@ -753,8 +751,7 @@ class ForwardExtendMover(ExtendingMover):
                 paths.PrefixTrajectoryEnsemble(
                     ensemble,
                     initial_trajectory[:-1]
-                ).can_append,
-                self.engine.max_length_stopper.can_append
+                ).can_append
             ]
         )
 
@@ -782,8 +779,7 @@ class BackwardExtendMover(ExtendingMover):
                 paths.SuffixTrajectoryEnsemble(
                     ensemble,
                     initial_trajectory[1:]
-                ).can_prepend,
-                self.engine.max_length_stopper.can_append
+                ).can_prepend
             ]
         )
 
@@ -1268,9 +1264,17 @@ class SelectionMover(PathMover):
 
         idx = 0
         prob = weights[0]
+        logger.debug(self.name + " " + str(weights))
         while prob <= rand and idx < len(weights):
             idx += 1
-            prob += weights[idx]
+            try:
+                prob += weights[idx]
+            except IndexError as e:
+                msg = ("Attempted to get index " + str(idx) + " from " +
+                       str(repr(weights)) + ": ")
+                e.args = tuple([msg + e.args[0]] + list(e.args[1:]))
+                raise
+
 
         logger_str = "{name} ({cls}) selecting {mtype} (index {idx})"
         logger.info(logger_str.format(
