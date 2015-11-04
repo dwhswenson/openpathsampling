@@ -40,8 +40,8 @@ class testStrategyLevels(object):
 
 class MoveStrategyTestSetup(object):
     def setup(self):
-        cvA = paths.CV_Function(name="xA", fcn=lambda s : s.xyz[0][0])
-        cvB = paths.CV_Function(name="xB", fcn=lambda s : -s.xyz[0][0])
+        cvA = paths.CV_Function(name="xA", f=lambda s : s.xyz[0][0])
+        cvB = paths.CV_Function(name="xB", f=lambda s : -s.xyz[0][0])
         self.stateA = paths.CVRangeVolume(cvA, float("-inf"), -0.5)
         self.stateB = paths.CVRangeVolume(cvB, float("-inf"), -0.5)
         interfacesA = vf.CVRangeVolumeSet(cvA, float("-inf"), 
@@ -430,6 +430,22 @@ class testMinusMoveStrategy(MoveStrategyTestSetup):
                 True
             )
 
+
+class testSingleReplicaMinusMoveStrategy(MoveStrategyTestSetup):
+    def test_make_movers(self):
+        strategy = SingleReplicaMinusMoveStrategy()
+        scheme = MoveScheme(self.network)
+        movers = strategy.make_movers(scheme)
+        assert_equal(len(movers), 2)
+
+        minuses = self.network.special_ensembles['minus']
+        ens_minusA = minuses.keys()[0]
+        ens_innerA = [t.ensembles[0] for t in minuses[ens_minusA]]
+        sig_A = set([ens_minusA] + ens_innerA)
+        ens_minusB = minuses.keys()[1]
+        ens_innerB = [t.ensembles[0] for t in minuses[ens_minusB]]
+        sig_B = set([ens_minusB] + ens_innerB)
+        all_ens_sigs = [m.ensemble_signature_set for m in movers]
 
 
 class testOrganizeByMoveGroupStrategy(MoveStrategyTestSetup):

@@ -20,22 +20,22 @@ from snapshot import Snapshot, Configuration, Momentum
 from trajectory import Trajectory
 from sample import Sample, SampleSet
 
-from collectivevariable import CV_Function, CV_MD_Function, CV_Featurizer, \
+from collectivevariable import CV_Function, CV_MDTraj_Function, CV_MSMB_Featurizer, \
     CV_Volume, CollectiveVariable
 
 from pathmover import (
-    BackwardShootMover, MinusMover, RandomChoiceMover, ForwardShootMover,
-    PathMover, PathMoverFactory, PathReversalMover,
-    ReplicaExchangeMover, ConditionalSequentialMover, EnsembleHopMover,
-    PartialAcceptanceSequentialMover, ReplicaIDChangeMover, SequentialMover,
-    ConditionalMover, RestrictToLastSampleMover, PathSimulatorMover,
-    PathReversalSet, NeighborEnsembleReplicaExchange, SampleMover,
-    StateSwapMover, FinalSubtrajectorySelectMover, EngineMover,
+    RandomChoiceMover, PathMover, ConditionalSequentialMover,
+    PartialAcceptanceSequentialMover, BackwardShootMover, ForwardShootMover,
+    ShootMover, BackwardExtendMover, ForwardExtendMover, MinusMover,
+    SingleReplicaMinusMover, PathMoverFactory, PathReversalMover,
+    ReplicaExchangeMover, EnsembleHopMover, ReplicaIDChangeMover,
+    SequentialMover, ConditionalMover, RestrictToLastSampleMover,
+    PathSimulatorMover, PathReversalSet, NeighborEnsembleReplicaExchange,
+    SampleMover, StateSwapMover, FinalSubtrajectorySelectMover, EngineMover,
     SwappingMover, FirstSubtrajectorySelectMover, MultipleSetMinusMover,
-    OneWayShootingMover, RandomSubtrajectorySelectMover, ShootMover,
-    SubPathMover, BackwardExtendMover, EnsembleFilterMover,
-    ForwardExtendMover, SelectionMover, FirstAllowedMover, LastAllowedMover,
-    OneWayExtendMover
+    OneWayShootingMover, RandomSubtrajectorySelectMover, SubPathMover,
+    EnsembleFilterMover, SelectionMover, FirstAllowedMover,
+    LastAllowedMover, OneWayExtendMover
 )
 
 from shooting import ShootingPoint, ShootingPointSelector, UniformSelector, \
@@ -50,8 +50,6 @@ from volume import (Volume, VolumeCombination, VolumeFactory, VoronoiVolume,
     IntersectionVolume, UnionVolume, SymmetricDifferenceVolume,
     RelativeComplementVolume, join_volumes
 )
-
-from todict import ObjectJSON, OPSNamed
 
 from tools import empty_snapshot_from_openmm_topology, snapshot_from_pdb, \
     to_openmm_topology, trajectory_from_mdtraj

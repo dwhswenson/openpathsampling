@@ -5,16 +5,16 @@ Created on 19.07.2014
 @author: David W. H. Swenson
 """
 
-import numpy as np
 import random
+import logging
+
+import numpy as np
 
 import openpathsampling as paths
-from openpathsampling.todict import OPSNamed, OPSObject
-
-import logging
+from openpathsampling.base import StorableNamedObject, StorableObject
 from ops_logging import initialization_logging
-
 from treelogic import TreeMixin
+
 
 logger = logging.getLogger(__name__)
 init_log = logging.getLogger('openpathsampling.initialization')
@@ -64,7 +64,7 @@ def make_list_of_pairs(l):
     return outlist
 
 
-class PathMover(TreeMixin, OPSNamed):
+class PathMover(TreeMixin, StorableNamedObject):
     """
     A PathMover is the description of a move in replica space.
     
@@ -100,7 +100,7 @@ class PathMover(TreeMixin, OPSNamed):
     """
 
     def __init__(self):
-        OPSNamed.__init__(self)
+        StorableNamedObject.__init__(self)
 
         self._in_ensembles = None
         self._out_ensembles = None
@@ -439,6 +439,7 @@ class SampleMover(PathMover):
             if not valid:
                 # one sample not valid reject
                 accepted = False
+                probability = 0.0
                 break
             else:
                 probability *= sample.bias
@@ -649,6 +650,8 @@ class ForwardShootMover(ShootMover):
 class BackwardShootMover(ShootMover):
     """A Backward shooting generator
     """
+
+    #TODO: Remove use of reversed_copy. The reversed snapshot already exists!
     def _shoot(self, shooting_point, ensemble):
         shoot_str = "Shooting {sh_dir} from frame {fnum} in [0:{maxt}]"
         logger.info(shoot_str.format(
@@ -1932,7 +1935,6 @@ class MinusMover(SubPathMover):
     _is_canonical = True
 
     def __init__(self, minus_ensemble, innermost_ensembles):
-
         try:
             innermost_ensembles = list(innermost_ensembles)
         except TypeError:
@@ -1994,6 +1996,7 @@ class MinusMover(SubPathMover):
 
         super(MinusMover, self).__init__(mover)
 
+
     def set_balance_partners(self):
         bp = self.balance_partner
         cond_seq = self.mover.mover
@@ -2017,6 +2020,62 @@ class MinusMover(SubPathMover):
         extension[1].balance_partner = bp_subtraj[0]
         extension.balance_partner = bp_subtraj
 
+
+class SingleReplicaMinusMover(MinusMover):
+    """
+    Minus mover for single replica TIS.
+
+    In SRTIS, the minus mover doesn't actually keep an active sample in the
+    minus interface. Instead, it just puts the newly generated segment into
+    the innermost ensemble.
+    """
+    def __init__(self, minus_ensemble, innermost_ensembles, bias=None):
+        try:
+            innermost_ensembles = list(innermost_ensembles)
+        except TypeError:
+            innermost_ensembles = [innermost_ensembles]
+
+        # TODO: Until we have automated detailed balance calculations, I
+        # think this will only be valid in the case of only one innermost
+        # ensemble.  But I think you only want to use it in the case of only
+        # one innermost ensemble anyway. The following warns us:
+        if len(innermost_ensembles) > 1:
+            logger.warning("Probably shouldn't use SingleReplicaMinusMover with MISTIS")
+
+        segment = minus_ensemble._segment_ensemble
+
+        hop_innermost_to_segment = RandomAllowedChoiceMover([
+            EnsembleHopMover(innermost, segment, bias=bias)
+            for innermost in innermost_ensembles
+        ])
+
+        # TODO: again, works for single interface set, but there has to be a
+        # smarter way to do this in the MISTIS case
+        hop_segment_to_innermost = RandomChoiceMover([
+            EnsembleHopMover(segment, innermost, bias=bias)
+            for innermost in innermost_ensembles
+        ])
+
+        forward_minus = ConditionalSequentialMover([
+            hop_innermost_to_segment,
+            ForwardExtendMover(segment, minus_ensemble),
+            FinalSubtrajectorySelectMover(minus_ensemble, segment),
+            hop_segment_to_innermost
+        ])
+
+        backward_minus = ConditionalSequentialMover([
+            hop_innermost_to_segment,
+            BackwardExtendMover(segment, minus_ensemble),
+            FirstSubtrajectorySelectMover(minus_ensemble, segment),
+            hop_segment_to_innermost
+        ])
+
+        mover = EnsembleFilterMover(RandomChoiceMover([backward_minus, 
+                                                       forward_minus]),
+                                    ensembles=innermost_ensembles)
+
+        # we skip MinusMover's init and go to the grandparent
+        super(MinusMover, self).__init__(mover)
 
 
 
@@ -2080,11 +2139,12 @@ class PathMoverFactory(object):
         pass
 
 
-class Details(OPSObject):
+class Details(StorableObject):
     """Details of an object. Can contain any data
     """
 
     def __init__(self, **kwargs):
+        super(Details, self).__init__()
         for key, value in kwargs.iteritems():
             setattr(self, key, value)
 
