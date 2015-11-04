@@ -32,7 +32,7 @@ from pathmover import (
     SequentialMover, ConditionalMover, RestrictToLastSampleMover,
     PathSimulatorMover, PathReversalSet, NeighborEnsembleReplicaExchange,
     SampleMover, StateSwapMover, FinalSubtrajectorySelectMover, EngineMover,
-    SwappingMover, FirstSubtrajectorySelectMover, MultipleSetMinusMover,
+    SwappingMover, FirstSubtrajectorySelectMover,
     OneWayShootingMover, RandomSubtrajectorySelectMover, SubPathMover,
     EnsembleFilterMover, SelectionMover, FirstAllowedMover,
     LastAllowedMover, OneWayExtendMover
