@@ -26,7 +26,7 @@ from collectivevariable import CV_Function, CV_MDTraj_Function, CV_MSMB_Featuriz
 from pathmover import (
     RandomChoiceMover, PathMover, ConditionalSequentialMover,
     PartialAcceptanceSequentialMover, BackwardShootMover, ForwardShootMover,
-    ShootMover, BackwardExtendMover, ForwardExtendMover, MinusMover,
+    BackwardExtendMover, ForwardExtendMover, MinusMover,
     SingleReplicaMinusMover, PathMoverFactory, PathReversalMover,
     ReplicaExchangeMover, EnsembleHopMover, ReplicaIDChangeMover,
     SequentialMover, ConditionalMover, RestrictToLastSampleMover,
@@ -38,7 +38,7 @@ from pathmover import (
     LastAllowedMover, OneWayExtendMover
 )
 
-from shooting import ShootingPoint, ShootingPointSelector, UniformSelector, \
+from shooting import ShootingPointSelector, UniformSelector, \
     GaussianBiasSelector, FirstFrameSelector, FinalFrameSelector
 
 from dynamics_engine import DynamicsEngine
