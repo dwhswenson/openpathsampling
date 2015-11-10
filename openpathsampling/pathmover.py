@@ -564,7 +564,7 @@ class EngineMover(SampleMover):
         # temporary test to make sure nothing went weird
         # old_bias = initial_point.sum_bias / trial_point.sum_bias
         # assert(abs(bias - old_bias) < 10e-6)
-        assert(initial_trajectory[shooting_index] in trial_trajectory)
+        # assert(initial_trajectory[shooting_index] in trial_trajectory)
 
         # we need to save the initial
         trial_details = paths.SampleDetails(
@@ -587,27 +587,25 @@ class EngineMover(SampleMover):
         return trials
 
     def _make_forward_trajectory(self, trajectory, shooting_index):
-        initial_snapshot = trajectory[shooting_index].copy()
+        initial_snapshot = trajectory[shooting_index]#.copy()
         run_f = paths.PrefixTrajectoryEnsemble(self.target_ensemble, 
                                                trajectory[0:shooting_index]
                                               ).can_append
         partial_trajectory = self.engine.generate(initial_snapshot, 
                                                   running=[run_f])
-        # keep the original snapshot in the trial_trajectory
-        trial_trajectory = (trajectory[0:shooting_index + 1] 
-                            + partial_trajectory[1:])
+        trial_trajectory = (trajectory[0:shooting_index] 
+                            + partial_trajectory)
         return trial_trajectory
 
     def _make_backward_trajectory(self, trajectory, shooting_index):
-        initial_snapshot = trajectory[shooting_index].reversed_copy()
+        initial_snapshot = trajectory[shooting_index].reversed#_copy()
         run_f = paths.SuffixTrajectoryEnsemble(self.target_ensemble,
                                                trajectory[shooting_index + 1:]
                                               ).can_prepend
         partial_trajectory = self.engine.generate(initial_snapshot, 
                                                   running=[run_f])
-        # keep the original snapshot in the trial_trajectory
-        trial_trajectory = (partial_trajectory.reversed[:-1] +
-                            trajectory[shooting_index:])
+        trial_trajectory = (partial_trajectory.reversed +
+                            trajectory[shooting_index + 1:])
         return trial_trajectory
 
 
