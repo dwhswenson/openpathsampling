@@ -66,11 +66,10 @@ from pathmover import (
     SequentialMover, ConditionalMover,
     PathSimulatorMover, PathReversalSet, NeighborEnsembleReplicaExchange,
     SampleMover, StateSwapMover, FinalSubtrajectorySelectMover, EngineMover,
-    FirstSubtrajectorySelectMover, MultipleSetMinusMover,
+    FirstSubtrajectorySelectMover, 
     OneWayShootingMover, RandomSubtrajectorySelectMover, SubPathMover,
     EnsembleFilterMover, SelectionMover, FirstAllowedMover,
-    LastAllowedMover, OneWayExtendMover, SubtrajectorySelectMover,
-    SwappingMover
+    LastAllowedMover, OneWayExtendMover, SubtrajectorySelectMover
 )
 
 from pathsimulator import (
