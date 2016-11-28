@@ -1027,6 +1027,33 @@ class testSequentialEnsemble(EnsembleTest):
             self._single_test(ensemble.can_append, ttraj[test], 
                               append_results[test], failmsg)
 
+    def test_split_optional_ending_ensemble(self):
+        # this is a test that I found written on a sticky note. It said that
+        # I needed this for the OPSPiggybacker. I'm not sure why it was
+        # needed, but I'll implement the test.
+        state_A = paths.CVDefinedVolume(op, float("-inf"), -1.0)
+        state_B = paths.CVDefinedVolume(op, 1.0, float("inf"))
+        ensemble = SequentialEnsemble([
+            paths.AllInXEnsemble(state_A) & paths.LengthEnsemble(1),
+            paths.AllOutXEnsemble(state_A),
+            paths.OptionalEnsemble(paths.AllInXEnsemble(state_A | state_B)
+                                   & paths.LengthEnsemble(1))
+        ])
+        no_end = make_1d_traj([-0.5, -0.3, 0.0, 0.3])
+        end_B = make_1d_traj([-0.5, -0.3, 0.3, 0.5, 0.6])
+        end_A = make_1d_traj([-0.5, -0.3, 0.3, -0.5, -0.6])
+        # assert_equal(ensemble(no_end), True)
+        assert_equal(ensemble(end_B), False)
+        assert_equal(ensemble(end_A), False)
+        segments_no_end = ensemble.split(no_end)
+        segments_end_A = ensemble.split(end_A)
+        segments_end_B = ensemble.split(end_B)
+        # assert_equal(len(segments_no_end), 1)
+        # assert_equal(len(segments_end_A), 1)
+        # assert_equal(len(segments_end_B), 1)
+
+
+
     def test_sequential_enter_exit(self):
         """SequentialEnsembles based on Enters/ExitsXEnsemble"""
         # TODO: this includes a test of the overlap ability
