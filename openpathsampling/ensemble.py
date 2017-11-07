@@ -2864,6 +2864,7 @@ class TISEnsemble(SequentialEnsemble):
             # it still works fine if we use the slower algorithm
             return super(TISEnsemble, self).__call__(trajectory, trusted)
 
+
     def trajectory_summary(self, trajectory):
         initial_state_i = None
         final_state_i = None
@@ -2921,6 +2922,143 @@ class TISEnsemble(SequentialEnsemble):
             "max_lambda=" + max_l + " "
         )
         return mystr
+
+class SequentialNonOverlappingVolumesEnsemble(SequentialEnsemble):
+    """Ensemble for paths with sequential and non-overlapping volumes.
+
+    """
+    def __init__(self, volume_list, optional_list=None):
+        if optional_list is None:
+            optional_list = [False] * len(volume_list)
+        self.volume_list = volume_list
+        self.optional_list = optional_list
+        if self.optional_list[0] or self.options_list[-1]:
+            raise RuntimeError("First and last ensemble cannot be optional.")
+
+        all_in_ens_list = [AllInXEnsemble(vol) for vol in volume_list]
+        ensembles = [
+            paths.OptionalEnsemble(ens) if optional else ens
+            for (ens, optional) in zip(all_in_ens_list, optional_list)
+        ]
+        pass
+
+    def split(self, trajectory, max_length=None, min_length=1, overlap=1,
+              reverse=False):
+        if max_length is not None or min_length != 1 or reverse:
+            return super(TransitionEnsemble, self).split(trajectory,
+                                                         max_length,
+                                                         min_length,
+                                                         overlap, reverse)
+
+        def increment_while(idx, traj, max_idx, volume):
+            while idx < max_idx and volume(traj[idx]):
+                idx += 1
+            return idx
+
+        len_traj = len(trajectory)
+        start_idx = 0
+        end_idx = 0
+        pass
+
+class TransitionEnsemble(SequentialEnsemble):
+    """Ensemble for paths connecting two states.
+
+    This is the basic ensemble for flexible-length transition path sampling;
+    start with a frame in A, end with a frame in B, no frames in between are
+    in either state. This subclass includes faster ways to check a candidate
+    trajectory, and faster splitting.
+
+    Parameters
+    ----------
+    initial_states
+    final_states
+    allow_instantaneous : bool
+        whether to allow transition that hop from initial to final without
+        any frames in the no-man's-land. Default False.
+    """
+    def __init__(self, initial_states, final_states,
+                 allow_instantaneous=False):
+        try:
+            _ = len(initial_states)
+        except TypeError:
+            initial_states = [initial_states]
+
+        try:
+            _ = len(final_states)
+        except TypeError:
+            final_states = [final_states]
+
+        self.volume_A = paths.volume.join_volumes(initial_states)
+        self.volume_B = paths.volume.join_volumes(final_states)
+        self.allow_instantaneous = allow_instantaneous
+
+        no_mans_land_ens = AllOutXEnsemble(self.volume_A | self.volume_B)
+        if self.allow_instantaneous:
+            no_mans_land_ens = paths.OptionalEnsemble(no_mans_land_ens)
+
+        super(TransitionEnsemble, self).__init__([
+            LengthEnsemble(1) & AllInXEnsemble(self.volume_A),
+            no_mans_land_ens,
+            LengthEnsemble(1) & AllInXEnsemble(self.volume_B)
+        ])
+        # TODO: need special reloading, I think
+
+    def __call__(self, trajectory, trusted=None, candidate=False):
+        if candidate:
+            return self.volume_A(trajectory[0]) \
+                    and self.volume_B(trajectory[-1])
+        else:
+            return super(TransitionEnsemble, self).__call__(trajectory,
+                                                            trusted)
+
+    def split(self, trajectory, max_length=None, min_length=1, overlap=1,
+              reverse=False):
+        if max_length is not None or min_length != 1 or reverse:
+            return super(TransitionEnsemble, self).split(trajectory,
+                                                         max_length,
+                                                         min_length,
+                                                         overlap, reverse)
+        # only deal with the reasonable case: no max length, no min length,
+        # forward search (reverse should give the same, but why would you
+        # call it?)
+        len_traj = len(trajectory)
+        start_idx = 0
+        end_idx = 0
+        no_mans_land = ~(self.volume_A | self.volume_B)
+        not_A = ~self.volume_A
+        results = []
+
+        # define two functions for internal use
+        check_split_candidate = lambda t, start, end: (
+            (end - start > 1 or self.allow_instantaneous) # end+1-start > 2
+            and self.volume_B(t[end])
+        )
+
+        def increment_while(idx, traj, max_idx, volume):
+            while idx < max_idx and volume(traj[idx]):
+                idx += 1
+            return idx
+
+        while end_idx < len_traj:
+            # go until start_idx is in state A
+            start_idx = increment_while(start_idx, trajectory, len_traj,
+                                        not_A)
+
+            # keep going until end_idx is not in no_mans_land
+            end_idx = start_idx + 1
+            end_idx = increment_while(end_idx, trajectory, len_traj,
+                                      no_mans_land)
+
+            if check_split_candidate(trajectory, start_idx, end_idx):
+                # found an acceptable A->B path
+                results.append(trajectory[start_idx:end_idx+1])
+                start_idx = end_idx + 1 - overlap
+            else:
+                # found an A->A path or unacceptable A->B (no NML frames)
+                start_idx = end_idx
+
+        return results
+
 
 
 class EnsembleFactory(object):
