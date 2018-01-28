@@ -5,11 +5,15 @@ checks:
         enabled: true
         config:
             threshold: 750  # 1000 is really the hard edge
+        exclude_paths:
+            - "*/tests/"  
 
     method-lines:
         enabled: true
         config:
             threshold: 35  # up from default 25 b/c lines, not statements
+        exclude_paths:
+            - "*/tests/"  
 
     argument-count:
         enabled: true
@@ -43,6 +47,8 @@ plugins:
                 enabled: true
                 issue_override:
                     severity: info
+        exclude_paths:
+            - "*/tests/"  
         config:
             languages:
                 python:
