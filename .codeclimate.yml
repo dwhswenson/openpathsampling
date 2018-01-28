@@ -23,8 +23,6 @@ checks:
 plugins:
     radon:
         enabled: true
-        exclude_paths:
-            - "*/tests/"  # many asserts mean high McCabe
         exclude_patterns:
             - "*/tests/"  # many asserts mean high McCabe
         config:
@@ -35,8 +33,6 @@ plugins:
         issue_override:
             severity: info
         exclude_patterns:
-            - "**pdb"
-        exclude_paths:
             - "**pdb"
         config:
             strings:
@@ -53,8 +49,6 @@ plugins:
                     severity: info
         exclude_patterns:
             - "*/tests/"  
-        exclude_paths:
-            - "*/tests/"  
         config:
             languages:
                 python:
@@ -63,7 +57,4 @@ plugins:
 exclude_patterns:
     - "docs/"
     - "**.pdb"
-
-ratings:
-    paths:
-        - "**py"
+    - "**/tests/"
