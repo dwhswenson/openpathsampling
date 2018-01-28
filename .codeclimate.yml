@@ -5,14 +5,14 @@ checks:
         enabled: true
         config:
             threshold: 750  # 1000 is really the hard edge
-        exclude_paths:
+        exclude_patterns:
             - "*/tests/"  
 
     method-lines:
         enabled: true
         config:
             threshold: 35  # up from default 25 b/c lines, not statements
-        exclude_paths:
+        exclude_patterns:
             - "*/tests/"  
 
     argument-count:
@@ -25,6 +25,8 @@ plugins:
         enabled: true
         exclude_paths:
             - "*/tests/"  # many asserts mean high McCabe
+        exclude_patterns:
+            - "*/tests/"  # many asserts mean high McCabe
         config:
             threshold: "C"
 
@@ -32,6 +34,8 @@ plugins:
         enabled: true
         issue_override:
             severity: info
+        exclude_patterns:
+            - "**pdb"
         exclude_paths:
             - "**pdb"
         config:
@@ -47,6 +51,8 @@ plugins:
                 enabled: true
                 issue_override:
                     severity: info
+        exclude_patterns:
+            - "*/tests/"  
         exclude_paths:
             - "*/tests/"  
         config:
