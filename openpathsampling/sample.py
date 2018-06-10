@@ -77,11 +77,11 @@ class SampleSet(StorableObject):
 
     @property
     def ensembles(self):
-        return self.ensemble_dict.keys()
+        return list(self.ensemble_dict.keys())
 
     @property
     def replicas(self):
-        return self.replica_dict.keys()
+        return list(self.replica_dict.keys())
 
     def __getitem__(self, key):
         if isinstance(key, paths.Ensemble):
