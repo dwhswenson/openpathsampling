@@ -1,3 +1,5 @@
+import random
+
 def ensemble_slots_from_sample_set(sample_set):
     """Create dict of ensemble slot objects from a sample set
 
@@ -52,6 +54,17 @@ class EnsembleSlot(object):
             all samples from list with the ensemble for this slot
         """
         return [s for s in samples if s.ensemble == self.ensemble]
+
+    def choose(self):
+        """Select a random sample from this EnsembleSlot
+
+        Returns
+        -------
+        :class:`.Sample`
+            randomly selected sample from this EnsembleSlot
+        """
+        return random.choice(self.samples)
+
 
     def update(self, input_samples, output_samples):
         """Update this sample based on input and output samples.
