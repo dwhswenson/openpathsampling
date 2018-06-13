@@ -1,6 +1,6 @@
 import logging
 import openpathsampling as paths
-from openpathsampling.experimental.dask import task_schedulers
+# from openpathsampling.experimental.dask import task_schedulers
 
 logger = logging.getLogger(__name__)
 from .path_simulator import PathSimulator, MCStep
@@ -165,6 +165,8 @@ class ShootFromSnapshotsSimulation(PathSimulator):
         n_snapshots = len(self.initial_snapshots)
         hook_state = None
         if scheduler is None:
+            # import here for import order when dealing with new storage
+            from openpathsampling.experimental.dask import task_schedulers
             scheduler = task_schedulers.TaskScheduler()  # default
         self.run_hooks('before_simulation', sim=self)
         for snapshot in self.initial_snapshots:
