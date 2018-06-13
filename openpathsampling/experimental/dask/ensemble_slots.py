@@ -1,4 +1,5 @@
 import random
+from openpathsampling.netcdfplus import StorableNamedObject
 
 def ensemble_slots_from_sample_set(sample_set):
     """Create dict of ensemble slot objects from a sample set
@@ -19,7 +20,7 @@ def ensemble_slots_from_sample_set(sample_set):
             for ens in sample_set.ensembles}
 
 
-class EnsembleSlot(object):
+class EnsembleSlot(StorableNamedObject):
     """
     Container object to hold samples associated with a specific ensemble.
 
@@ -31,6 +32,7 @@ class EnsembleSlot(object):
         the samples which are associated with the given ensemble
     """
     def __init__(self, ensemble, samples):
+        super(EnsembleSlot, self).__init__()
         self.ensemble = ensemble
         self.samples = samples
         if self.invalid():
