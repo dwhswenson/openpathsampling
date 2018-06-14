@@ -68,7 +68,7 @@ class EnsembleSlot(StorableNamedObject):
         return random.choice(self.samples)
 
 
-    def update(self, input_samples, output_samples):
+    def update(self, input_samples, change):
         """Update this sample based on input and output samples.
 
         Removes all input samples for this slot's ensemble; appends all
@@ -79,18 +79,22 @@ class EnsembleSlot(StorableNamedObject):
         input_samples : iterable of :class:`.Sample`
             samples that were used as input to a move (must already be
             present in this EnsembleSlot)
-        output_samples : iterable of :class:`.Sample`
-            samples that came as the output of a move (after update, this
-            slot will old these sample)
+        change : :class:`.MoveChange`
+            move change for the results
         """
+        if not change.accepted:
+            return self  # early skip out
+
         my_input = self.select_samples(input_samples)
-        my_output = self.select_samples(output_samples)
+        my_output = self.select_samples(change.results)
 
         for sample in my_input:
             self.samples.remove(sample)
 
         for sample in my_output:
             self.samples.append(sample)
+
+        return self
 
     def invalid(self):
         """List any samples in self.samples with incorrect ensemble.
