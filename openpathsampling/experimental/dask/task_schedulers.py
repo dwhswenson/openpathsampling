@@ -8,6 +8,14 @@ except ImportError:
 else:
     HAS_DASK = True
 
+from openpathsampling.experimental.storage.serialization_helpers import (
+    get_uuid, has_uuid, encode_uuid, decode_uuid, encoded_uuid_re
+)
+
+from openpathsampling.experimental import storage
+serialization = storage.ops_storage.ops_class_info
+
+
 class TaskScheduler(StorableNamedObject):
     def wrap_task(self, task, *args, **kwargs):
         return task(*args, **kwargs)
@@ -43,6 +51,28 @@ def deserialze_and_task(task, *serialized_args, **serialized_kwargs):
     args, kwargs = deserialize(*serialized_args, **serialized_kwargs)
     return task(*args, **kwargs)
 
+def serialize_args_kwargs(args, kwargs):
+    to_serialize = []
+    arg_uuids = []
+    kwarg_uuids = {}
+    for arg in args:
+        if has_uuid(arg):
+            to_serialize.append(arg)
+            arg_uuids.append(encode_uuid(arg))
+        else:
+            arg_uuids.append(arg)
+
+    for key, kwarg in kwargs.items():
+        if has_uuid(kwarg):
+            to_serialize.append(kwarg)
+            kwarg_uuids[key] = encode_uuid(kwarg)
+        else:
+            kwarg_uuids[key] = kwarg
+
+    serialized = serialization.serialize(to_serialize)
+    return arg_uuid, kwarg_uuids, serialized
+
+
 class DaskTaskScheduler(TaskScheduler):
     def __init__(self, client):
         import dask.distributed  # raise ImportError if missing
@@ -69,5 +99,9 @@ class DaskTaskScheduler(TaskScheduler):
 
 
     def wrap_hook(self, hook, *args, **kwargs):
+        for arg in args:
+            if has_uuid(arg):
+                to_serialize.append(arg)
+                arg_uuids
         return self.client.submit(hook, *args, **kwargs)
 
