@@ -2,6 +2,9 @@ import random
 from openpathsampling.netcdfplus import StorableNamedObject
 import numpy as np
 
+import logging
+logger = logging.getLogger(__name__)
+
 from .serialize_wrapping import serialize_wrap, unwrap
 from openpathsampling.experimental.storage.serialization_helpers import \
         get_uuid
@@ -36,6 +39,7 @@ def serialized_ensemble_slots_from_sample_set(sample_set):
             for (ens, slot) in ensemble_slots.items()}
 
 def select_samples_from_slots(s_slot_list):
+    logger.info("Selecting samples")
     slots = [unwrap(s_slot) for s_slot in s_slot_list]
     samples = [slot.choose() for slot in slots]
     return serialize_wrap(samples)
@@ -43,6 +47,7 @@ def select_samples_from_slots(s_slot_list):
 def move_task(s_mover, s_samples):
     mover = unwrap(s_mover)
     samples = unwrap(s_samples)
+    logger.info("Performing MC move " + mover.name)
     change = mover.move_core(samples)
     return serialize_wrap(change)
 
@@ -50,6 +55,7 @@ def update_slots(s_change, s_input_samples, s_slot):
     change = unwrap(s_change)
     input_samples = unwrap(s_input_samples)
     slot = unwrap(s_slot)
+    logger.info("Updating the slots")
     slot.update(input_samples, change)
     return serialize_wrap(slot)
 
