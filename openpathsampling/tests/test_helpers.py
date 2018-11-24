@@ -104,6 +104,14 @@ class CalvinistDynamics(DynamicsEngine):
                                            engine=engine
                                           )
         self.frame_index = None
+        self.did_stop = False
+
+    @staticmethod
+    def is_valid_snapshot(snapshot):
+        if np.any(np.isnan(snapshot.xyz)):
+            return False
+        else:
+            return True
 
     @property
     def current_snapshot(self):
@@ -138,6 +146,7 @@ class CalvinistDynamics(DynamicsEngine):
 
     def stop(self, trajectory):
         self.frame_index = None
+        self.did_stop = True
 
 class CallIdentity(object):
     '''Stub for a callable that returns itself'''
