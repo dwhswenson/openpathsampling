@@ -1,18 +1,19 @@
 import logging
 import itertools
-import random
 
 import pandas as pd
 
 import openpathsampling as paths
 from openpathsampling.netcdfplus import StorableNamedObject
 
-from functools import reduce  # not built-in for py3
+# from functools import reduce  # not built-in for py3
 
 logger = logging.getLogger(__name__)
 
+
 def _default_state_name(state):
     return state.name if state.is_named else str(state)
+
 
 def _name_unnamed_states(unnamed_states, all_names):
     name_index = 0
@@ -22,8 +23,10 @@ def _name_unnamed_states(unnamed_states, all_names):
         state = state.named(index_to_string(name_index))
         name_index += 1
 
+
 def _or_bar_namer(volumes):
     return "|".join([v.name for v in volumes])
+
 
 # TODO: this should be moved into a general tools module
 def listify(obj):
@@ -41,6 +44,15 @@ def index_to_string(index):
     return mystr
 
 
+# TODO: this will be removed when we start using the analysis.tis methods
+# for the network.rate_matrix
+def _set_hist_args(transition, hist_args):
+    for histname in hist_args.keys():
+        trans_hist = transition.ensemble_histogram_info[histname]
+        if trans_hist.hist_args == {}:
+            trans_hist.hist_args = hist_args[histname]
+
+
 class TransitionNetwork(StorableNamedObject):
     """
     Subclasses of TransitionNetwork are the main way to set up calculations
@@ -53,8 +65,8 @@ class TransitionNetwork(StorableNamedObject):
     """
     def __init__(self):
         super(TransitionNetwork, self).__init__()
-        #self.transitions = {}
-        #self.special_ensembles = {}
+        # self.transitions = {}
+        # self.special_ensembles = {}
 
     @property
     def sampling_ensembles(self):
@@ -118,6 +130,7 @@ class GeneralizedTPSNetwork(TransitionNetwork):
         pathlengths.
     """
     TransitionType = NotImplemented
+
     def __init__(self, initial_states, final_states,
                  allow_self_transitions=False, **kwargs):
         # **kwargs gets passed to the transition
@@ -137,7 +150,6 @@ class GeneralizedTPSNetwork(TransitionNetwork):
             self._build_transitions(self.initial_states, self.final_states,
                                     allow_self_transitions, **kwargs)
 
-
     def _build_transitions(self, initial_states, final_states,
                            allow_self_transitions, **kwargs):
         sampling_transitions = self._build_sampling_transitions(
@@ -148,14 +160,12 @@ class GeneralizedTPSNetwork(TransitionNetwork):
         )
         return sampling_transitions, transitions
 
-
     def _sampling_transitions_from_pairs(self, state_pairs, **kwargs):
         initial, final = state_pairs[0]
         sampling_transition = self.TransitionType(initial, final, **kwargs)
         for initial, final in state_pairs[1:]:
             sampling_transition.add_transition(initial, final)
         return [sampling_transition]
-
 
     def _build_sampling_transitions(self, initial_states, final_states,
                                     allow_self_transitions, **kwargs):
@@ -177,22 +187,20 @@ class GeneralizedTPSNetwork(TransitionNetwork):
         )
         return sampling_transitions
 
-
     def _build_analysis_transitions(self, initial_states, final_states,
                                     allow_self_transitions, **kwargs):
         transitions = {
-            (initial, final) : self.TransitionType(initial, final, **kwargs)
+            (initial, final): self.TransitionType(initial, final, **kwargs)
             for (initial, final) in itertools.product(initial_states,
                                                       final_states)
             if initial != final
         }
         return transitions
 
-
     def to_dict(self):
         ret_dict = {
-            'transitions' : self.transitions,
-            'x_sampling_transitions' : self._sampling_transitions,
+            'transitions': self.transitions,
+            'x_sampling_transitions': self._sampling_transitions,
             'special_ensembles': self.special_ensembles
         }
         try:
@@ -254,15 +262,14 @@ class GeneralizedTPSNetwork(TransitionNetwork):
                                                                **kwargs)
 
         dict_result = {
-            'x_sampling_transitions' : sampling,
-            'transitions' : transitions
+            'x_sampling_transitions': sampling,
+            'transitions': transitions
         }
         dict_result.update(kwargs)
         network = cls.from_dict(dict_result)
         network.initial_states = initial_states
         network.final_states = final_states
         return network
-
 
     @classmethod
     def from_states_all_to_all(cls, states, allow_self_transitions=False,
@@ -276,6 +283,7 @@ class TPSNetwork(GeneralizedTPSNetwork):
     Class for flexible pathlength TPS networks (2-state or multiple state).
     """
     TransitionType = paths.TPSTransition
+
     # we implement these functions entirely to fix the signature (super's
     # version allow arbitrary kwargs) so the documentation can read them.
     def __init__(self, initial_states, final_states,
@@ -299,6 +307,7 @@ class FixedLengthTPSNetwork(GeneralizedTPSNetwork):
     Class for fixed pathlength TPS networks (2-states or multiple states).
     """
     TransitionType = paths.FixedLengthTPSTransition
+
     # as with TPSNetwork, we don't really need to add these functions.
     # However, without them, we need to explicitly name `length` as
     # length=value in these functions. This frees us of that, and gives us
@@ -404,7 +413,6 @@ class TISNetwork(TransitionNetwork):
         for trans in self.transitions.values():
             trans._flux = flux_dictionary[(trans.stateA, trans.interfaces[0])]
 
-
     @property
     def minus_ensembles(self):
         return list(self.special_ensembles['minus'].keys())
@@ -448,8 +456,6 @@ class TISNetwork(TransitionNetwork):
         return None
 
 
-#def msouter_state_switching(mstis, steps):
-
 class MSTISNetwork(TISNetwork):
     """
     Multiple state transition interface sampling network.
@@ -472,10 +478,10 @@ class MSTISNetwork(TISNetwork):
     """
     def to_dict(self):
         ret_dict = {
-            'from_state' : self.from_state,
-            'states' : self.states,
-            'special_ensembles' : self.special_ensembles,
-            'trans_info' : self.trans_info,
+            'from_state': self.from_state,
+            'states': self.states,
+            'special_ensembles': self.special_ensembles,
+            'trans_info': self.trans_info,
             'ms_outer_objects': self.ms_outer_objects
         }
         return ret_dict
@@ -563,7 +569,6 @@ class MSTISNetwork(TISNetwork):
             local_transitions[(state_A, state_B)] = trans
         return local_transitions
 
-
     def _build_analysis_transitions(self):
         # set up analysis transitions (not to be saved)
         transitions = {}
@@ -575,7 +580,6 @@ class MSTISNetwork(TISNetwork):
             transitions.update(local_transitions)
 
         return transitions
-
 
     @staticmethod
     def build_one_state_sampling_transition(state, interfaces, all_states):
@@ -592,7 +596,6 @@ class MSTISNetwork(TISNetwork):
             orderparameter=interfaces.cv
         )
         return this_trans
-
 
     def _build_fromstate_transitions(self, trans_info):
         """
@@ -657,13 +660,11 @@ class MSTISNetwork(TISNetwork):
             except KeyError:
                 self.special_ensembles['minus'] = {this_minus : [this_trans]}
 
-
     def __str__(self):
         mystr = "Multiple State TIS Network:\n"
         for state in self.from_state.keys():
             mystr += str(self.from_state[state])
         return mystr
-
 
     def rate_matrix(self, steps, force=False):
         """
@@ -688,10 +689,11 @@ class MSTISNetwork(TISNetwork):
         for stateA in self.from_state.keys():
             transition = self.from_state[stateA]
             # set up the hist_args if necessary
-            for histname in self.hist_args.keys():
-                trans_hist = transition.ensemble_histogram_info[histname]
-                if trans_hist.hist_args == {}:
-                    trans_hist.hist_args = self.hist_args[histname]
+            _set_hist_args(transition, self.hist_args)
+            # for histname in self.hist_args.keys():
+                # trans_hist = transition.ensemble_histogram_info[histname]
+                # if trans_hist.hist_args == {}:
+                    # trans_hist.hist_args = self.hist_args[histname]
 
             transition.total_crossing_probability(steps=steps,
                                                   force=force)
@@ -700,7 +702,6 @@ class MSTISNetwork(TISNetwork):
                 if stateA != stateB:
                     analysis_trans = self.transitions[(stateA, stateB)]
                     analysis_trans.copy_analysis_from(transition)
-
 
         for trans in self.transitions.values():
             rate = trans.rate(steps)
@@ -712,8 +713,6 @@ class MSTISNetwork(TISNetwork):
 
         return self._rate_matrix
 
-
-#def multiple_set_minus_switching(mistis, steps):
 
 class MISTISNetwork(TISNetwork):
     """
@@ -780,10 +779,9 @@ class MISTISNetwork(TISNetwork):
             state.named(index_to_string(name_index))
             name_index += 1
 
-
         if not hasattr(self, "input_transitions"):
             self.input_transitions = {
-                (stateA, stateB) :
+                (stateA, stateB):
                 paths.TISTransition(stateA, stateB, interface, interface.cv,
                                     name=stateA.name+"->"+stateB.name)
                 for (stateA, interface, stateB) in self.trans_info
@@ -808,23 +806,21 @@ class MISTISNetwork(TISNetwork):
 
         self._sampling_transitions = self.x_sampling_transitions
 
-
         # by default, we set assign these values to all ensembles
         self.hist_args = {}
 
         self._build_analysis_transitions()
 
-
     def to_dict(self):
         ret_dict = {
-            'special_ensembles' : self.special_ensembles,
-            'transition_pairs' : self.transition_pairs,
-            'x_sampling_transitions' : self.x_sampling_transitions,
-            'transition_to_sampling' : self.transition_to_sampling,
-            'input_transitions' : self.input_transitions,
-            'trans_info' : self.trans_info,
-            'strict_sampling' : self.strict_sampling,
-            'ms_outer_objects' : self.ms_outer_objects
+            'special_ensembles': self.special_ensembles,
+            'transition_pairs': self.transition_pairs,
+            'x_sampling_transitions': self.x_sampling_transitions,
+            'transition_to_sampling': self.transition_to_sampling,
+            'input_transitions': self.input_transitions,
+            'trans_info': self.trans_info,
+            'strict_sampling': self.strict_sampling,
+            'ms_outer_objects': self.ms_outer_objects
         }
         return ret_dict
 
@@ -841,12 +837,11 @@ class MISTISNetwork(TISNetwork):
                          strict_sampling=dct['strict_sampling'])
         return network
 
-
     def _build_transition_pairs(self, transitions):
         # identify transition pairs
         transition_pair_set_dict = {}
         for initial in self.initial_states:
-            for t1 in [t for t in transitions if t.stateA==initial]:
+            for t1 in [t for t in transitions if t.stateA == initial]:
                 t_reverse = [
                     t for t in transitions
                     if t.stateA == t1.stateB and t.stateB == t1.stateA
@@ -859,7 +854,6 @@ class MISTISNetwork(TISNetwork):
                 elif len(t_reverse) > 1:  # pragma: no cover
                     raise RuntimeError("More than one reverse transition")
                 # if len(t_reverse) is 0, we just pass
-
 
         transition_pairs = list(transition_pair_set_dict.values())
         return transition_pairs
@@ -926,7 +920,7 @@ class MISTISNetwork(TISNetwork):
             # trans_from_initial: list of transition from initial
             trans_from_initial = [
                 t for t in self.x_sampling_transitions
-                if t.stateA==initial
+                if t.stateA == initial
             ]
             for t1 in trans_from_initial:
                 innermosts.append(t1.interfaces[0])
@@ -937,7 +931,7 @@ class MISTISNetwork(TISNetwork):
             try:
                 self.special_ensembles['minus'][minus] = trans_from_initial
             except KeyError:
-                self.special_ensembles['minus'] = {minus : trans_from_initial}
+                self.special_ensembles['minus'] = {minus: trans_from_initial}
 
     def _build_analysis_transitions(self):
         self.transitions = {}
@@ -956,7 +950,6 @@ class MISTISNetwork(TISNetwork):
             #analysis_trans.special_ensembles = sample_trans.special_ensembles
             self.transitions[(stateA, stateB)] = analysis_trans
 
-
     def rate_matrix(self, steps, force=False):
         initial_names = [s.name for s in self.initial_states]
         final_names = [s.name for s in self.final_states]
@@ -964,10 +957,11 @@ class MISTISNetwork(TISNetwork):
                                          index=initial_names)
         for trans in self.transitions.values():
             # set up the hist_args if necessary
-            for histname in self.hist_args.keys():
-                trans_hist = trans.ensemble_histogram_info[histname]
-                if trans_hist.hist_args == {}:
-                    trans_hist.hist_args = self.hist_args[histname]
+            _set_hist_args(trans, self.hist_args)
+            # for histname in self.hist_args.keys():
+                # trans_hist = trans.ensemble_histogram_info[histname]
+                # if trans_hist.hist_args == {}:
+                    # trans_hist.hist_args = self.hist_args[histname]
             tcp = trans.total_crossing_probability(steps=steps,
                                                    force=force)
             if trans._flux is None:
