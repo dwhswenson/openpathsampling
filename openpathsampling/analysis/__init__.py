@@ -1,2 +1,3 @@
-from path_histogram import PathHistogram
-import tools
+from .path_histogram import PathHistogram
+from . import tis
+from . import tools

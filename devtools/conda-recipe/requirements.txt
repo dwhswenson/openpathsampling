@@ -1,7 +1,7 @@
 python
 scipy
 pandas
-hdf4=4.2.12
+future
 jupyter
 netcdf4
 openmm
@@ -11,3 +11,4 @@ svgwrite
 networkx
 matplotlib
 ujson
+pyemma

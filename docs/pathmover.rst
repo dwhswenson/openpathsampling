@@ -2,8 +2,8 @@
 
 .. currentmodule:: openpathsampling.pathmover
 
-PathMover Functions
-===================
+PathMover API
+=============
 
 :class:`openpathsampling.PathMover`
 
@@ -64,7 +64,6 @@ Swapping movers
     :toctree: api/generated/
 
     ReplicaExchangeMover
-    NeighborEnsembleReplicaExchange
     StateSwapMover
 
 Logical movers
@@ -90,13 +89,3 @@ Pre-made combined movers
 
     MinusMover
     OneWayShootingMover
-    MultipleSetMinusMover
-
-mover factory
--------------
-.. autosummary::
-    :toctree: api/generated/
-
-    PathMoverFactory.NearestNeighborRepExSet
-    PathMoverFactory.OneWayShootingSet
-    PathMoverFactory.TwoWayShootingSet

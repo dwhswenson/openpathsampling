@@ -1,7 +1,8 @@
 import numpy as np
-from shared import StaticContainerStore, StaticContainer
+from .shared import StaticContainerStore, StaticContainer, unmask_quantity
 import mdtraj
 from openpathsampling.netcdfplus import WeakLRUCache
+import openpathsampling as paths
 
 variables = ['statics']
 lazy = ['statics']
@@ -9,7 +10,6 @@ lazy = ['statics']
 storables = ['statics']
 
 dimensions = ['n_atoms', 'n_spatial']
-
 
 def netcdfplus_init(store):
     static_store = StaticContainerStore()
@@ -39,7 +39,7 @@ def coordinates(snapshot):
     """
 
     if snapshot.statics is not None:
-        return snapshot.statics.coordinates
+        return unmask_quantity(snapshot.statics.coordinates)
 
     return None
 
@@ -64,7 +64,7 @@ def box_vectors(snapshot):
         simtk.unit.Unit.
     """
     if snapshot.statics is not None:
-        return snapshot.statics.box_vectors
+        return unmask_quantity(snapshot.statics.box_vectors)
 
     return None
 
@@ -89,16 +89,11 @@ def md(snapshot):
 
     Notes
     -----
-    Rather slow since the topology has to be made each time. Try to avoid it
+    Rather slow since the topology has to be made each time. Try to avoid
+    it. This will only work if the engine has an mdtraj_topology property.
     """
-
     if snapshot.statics is not None:
-        n_atoms = snapshot.coordinates.shape[0]
-
-        output = np.zeros([1, n_atoms, 3], np.float32)
-        output[0, :, :] = snapshot.coordinates
-
-        return mdtraj.Trajectory(output, snapshot.topology.mdtraj)
+        return paths.Trajectory([snapshot]).to_mdtraj()
 
 
 @property

@@ -36,7 +36,7 @@ class ChannelAnalysis(StorableNamedObject):
         self.replica = replica
 
         self._treat_multiples = 'all'
-        self._results = {c: [] for c in self.channels.keys() + [None]}
+        self._results = {c: [] for c in list(self.channels.keys()) + [None]}
         if len(steps) > 0:
             self._analyze(steps)
 
@@ -375,8 +375,14 @@ class ChannelAnalysis(StorableNamedObject):
             first element is the length of the input set, followed by
             the input as a sorted list
         """
-        ll = sorted(list(label))
-        return [len(ll)] + ll
+        label_list = list(label)
+        if None in label_list:
+            has_None = [None]
+            label_list.remove(None)
+        else:
+            has_None = []
+        ll = sorted(label_list)
+        return [len(ll)] + has_None + ll
 
     @staticmethod
     def label_to_string(label):
@@ -416,8 +422,7 @@ class ChannelAnalysis(StorableNamedObject):
         switch_count = collections.Counter(switches)
         df = pd.DataFrame(index=sorted_labels, columns=sorted_labels)
         for switch in switch_count:
-            df.set_value(index=switch[0], col=switch[1],
-                         value=switch_count[switch])
+            df.at[switch[0], switch[1]] = switch_count[switch]
 
         df = df.fillna(0)
         return df

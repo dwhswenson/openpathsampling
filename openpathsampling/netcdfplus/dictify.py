@@ -12,21 +12,51 @@ import ujson
 import marshal
 import types
 import opcode
-import __builtin__
 
-from base import StorableObject
+from .base import StorableObject
 
 from openpathsampling.tools import word_wrap
 
-from cache import WeakValueCache
+from .cache import WeakValueCache
 
 __author__ = 'Jan-Hendrik Prinz'
+
+import sys
+if sys.version_info > (3, ):
+    long = int
+    unicode = str
+    builtin_module = 'builtins'
+    get_code = lambda func: func.__code__
+    intify_byte = lambda b: b
+    decodebytes = lambda s: base64.decodebytes(s.encode())
+    import builtins
+else:
+    builtin_module = '__builtin__'
+    get_code = lambda func: func.func_code
+    intify_byte = lambda b: ord(b)
+    decodebytes = base64.decodestring
+    import builtins
+
+# in Python 3.6 the opcodes have changed width
+if sys.version_info > (3, 6):
+    opcode_arg_width = 1
+    opcode_no_arg_width = 1
+else:
+    opcode_arg_width = 2
+    opcode_no_arg_width = 0
 
 
 class ObjectJSON(object):
     """
     A simple implementation of a pickle algorithm to create object that can be
     converted to json and back
+
+    Attributes
+    ----------
+    safemode: bool
+        If set to `True` the recreation of marshalled objects like functions is
+        switched off and these objects are replaced by None. Can be used to load
+        from incompatible python versions or potential unsafe trajectory files.
     """
 
     allow_marshal = True
@@ -58,6 +88,7 @@ class ObjectJSON(object):
         self.allowed_storable_types = dict()
         self.type_names = {}
         self.type_classes = {}
+        self.safemode = False
 
         self.update_class_list()
 
@@ -67,7 +98,7 @@ class ObjectJSON(object):
             cls.__name__: cls for cls in self.allowed_storable_atomic_types}
         self.type_names.update(self.class_list)
         self.type_classes = {
-            cls: name for name, cls in self.type_names.iteritems()}
+            cls: name for name, cls in self.type_names.items()}
 
     def simplify_object(self, obj):
         return {
@@ -100,7 +131,7 @@ class ObjectJSON(object):
             return {
                 '_integer': str(obj)}
 
-        elif obj.__class__.__module__ != '__builtin__':
+        elif obj.__class__.__module__ != builtin_module:
             if obj.__class__ is units.Quantity:
                 # This is number with a unit so turn it into a list
                 if self.unit_system is not None:
@@ -155,20 +186,20 @@ class ObjectJSON(object):
                 result = {
                     '_dict': [
                         self.simplify(tuple([key, o]))
-                        for key, o in obj.iteritems()
+                        for key, o in obj.items()
                         if key not in self.excluded_keys
                     ]}
             else:
                 # simple enough, do it the old way
                 # FASTER VERSION NORMALLY
                 result = {
-                    key: self.simplify(o) for key, o in obj.iteritems()
+                    key: self.simplify(o) for key, o in obj.items()
                     if key not in self.excluded_keys
                 }
 
                 # SLOWER VERSION FOR DEBUGGING
                 # result = {}
-                # for key, o in obj.iteritems():
+                # for key, o in obj.items():
                 # logger.debug("Making dict entry of " + str(key) + " : "
                 # + str(o))
                 # if key not in self.excluded_keys:
@@ -202,7 +233,7 @@ class ObjectJSON(object):
 
             elif '_numpy' in obj:
                 return np.frombuffer(
-                    base64.decodestring(obj['_data']),
+                    decodebytes(obj['_data']),
                     dtype=np.dtype(obj['_dtype'])).reshape(
                         self.build(obj['_numpy'])
                 )
@@ -255,12 +286,15 @@ class ObjectJSON(object):
                     return None
 
             elif '_marshal' in obj or '_module' in obj:
+                if self.safemode:
+                    return None
+
                 return self.callable_from_dict(obj)
 
             else:
                 return {
                     self._unicode2str(key): self.build(o)
-                    for key, o in obj.iteritems()
+                    for key, o in obj.items()
                 }
 
         elif type(obj) is list:
@@ -285,7 +319,7 @@ class ObjectJSON(object):
     @staticmethod
     def unit_from_dict(unit_dict):
         unit = units.Unit({})
-        for unit_name, unit_multiplication in unit_dict.iteritems():
+        for unit_name, unit_multiplication in unit_dict.items():
             unit *= getattr(units, unit_name) ** unit_multiplication
 
         return unit
@@ -326,10 +360,10 @@ class ObjectJSON(object):
             global_vars = ObjectJSON._find_var(c, opcode.opmap['LOAD_GLOBAL'])
             import_vars = ObjectJSON._find_var(c, opcode.opmap['IMPORT_NAME'])
 
-            builtins = dir(__builtin__)
+            all_builtins = dir(builtins)
 
             global_vars = list(set(
-                [var for var in global_vars if var not in builtins]))
+                [var for var in global_vars if var not in all_builtins]))
             import_vars = list(set(import_vars))
 
             err = ''
@@ -393,13 +427,16 @@ class ObjectJSON(object):
                                    word_wrap(err, 60))
 
             return {
-                '_marshal': base64.b64encode(
-                    marshal.dumps(c.func_code)),
+                '_marshal': ObjectJSON._to_marshal(c),
                 '_global_vars': global_vars,
                 '_module_vars': import_vars
             }
 
         raise RuntimeError('Locally defined classes are not storable yet')
+
+    @staticmethod
+    def _to_marshal(c):
+        return base64.b64encode(marshal.dumps(get_code(c)))
 
     @staticmethod
     def callable_from_dict(c_dict):
@@ -437,6 +474,48 @@ class ObjectJSON(object):
         return c
 
     @staticmethod
+    def _to_opcode(code):
+        """
+       Yields the tuple opcode + argument for code
+
+        Parameters
+        ----------
+        code : function
+            the python bytecode to be searched
+
+        Returns
+        -------
+        generator of (int, int)
+            generator the returns tuples of opcode + argument
+        """
+
+        opcode_stream = get_code(code).co_code
+        i = 0
+        extended = 0
+        length = len(opcode_stream)
+        while i < length:
+            int_code = intify_byte(opcode_stream[i])
+            i += 1
+            if int_code >= opcode.HAVE_ARGUMENT:
+                opargs = intify_byte(opcode_stream[i]) + extended
+                if opcode_arg_width == 2:
+                    # before Python 3.6
+                    opargs += intify_byte(opcode_stream[i + 1]) * 256
+
+                extended = 0
+                i += opcode_arg_width
+
+                if int_code == opcode.EXTENDED_ARG:
+                    extended = (256 ** opcode_arg_width) * opargs
+                    continue
+
+            else:
+                i += opcode_no_arg_width
+                opargs = None
+
+            yield int_code, opargs
+
+    @staticmethod
     def _find_var(code, op):
         """
         Helper function to search in python bytecode for specific function calls
@@ -454,21 +533,21 @@ class ObjectJSON(object):
             a list of co_names used in this function when calling op
         """
 
-        # TODO: Clean this up. It now works only for codes that use co_names
-        opcodes = code.func_code.co_code
-        i = 0
-        ret = []
-        while i < len(opcodes):
-            int_code = ord(opcodes[i])
-            if int_code == op:
-                ret.append((i, ord(opcodes[i + 1]) + ord(opcodes[i + 2]) * 256))
+        code_object = get_code(code)
+        if op in opcode.hasconst:
+            variable = code_object.co_consts
+        elif op in opcode.haslocal:
+            variable = code_object.co_varnames
+        elif op in opcode.hasname:
+            variable = code_object.co_names
+        elif op in opcode.hasfree:
+            variable = code_object.co_freevars
+        else:
+            return []
 
-            if int_code < opcode.HAVE_ARGUMENT:
-                i += 1
-            else:
-                i += 3
-
-        return [code.func_code.co_names[i[1]] for i in ret]
+        return list(set([
+            variable[arg] for code, arg in ObjectJSON._to_opcode(code)
+            if code == op and arg is not None]))
 
     def to_json(self, obj, base_type=''):
         simplified = self.simplify(obj, base_type)
@@ -519,7 +598,7 @@ class StorableObjectJSON(ObjectJSON):
     def simplify(self, obj, base_type=''):
         if obj is self.storage:
             return {'_storage': 'self'}
-        if obj.__class__.__module__ != '__builtin__':
+        if obj.__class__.__module__ != builtin_module:
             if obj.__class__ in self.storage._obj_store:
                 store = self.storage._obj_store[obj.__class__]
                 if not store.nestable or obj.base_cls_name != base_type:
@@ -562,7 +641,7 @@ class UUIDObjectJSON(ObjectJSON):
         if obj is self.storage:
             return {'_storage': 'self'}
 
-        if obj.__class__.__module__ != '__builtin__':
+        if obj.__class__.__module__ != builtin_module:
             if obj.__class__ in self.storage._obj_store:
                 store = self.storage._obj_store[obj.__class__]
                 if not store.nestable or obj.base_cls_name != base_type:
@@ -594,7 +673,7 @@ class UUIDObjectJSON(ObjectJSON):
 
             if '_hex_uuid' in obj and '_store' in obj:
                 store = self.storage._stores[obj['_store']]
-                result = store.load(long(obj['_hex_uuid'], 16))
+                result = store.load(int(obj['_hex_uuid'].strip('L'), 16))
 
                 return result
 
@@ -608,7 +687,7 @@ class CachedUUIDObjectJSON(ObjectJSON):
         self.uuid_cache = WeakValueCache()
 
     def simplify(self, obj, base_type=''):
-        if obj.__class__.__module__ != '__builtin__':
+        if obj.__class__.__module__ != builtin_module:
             if hasattr(obj, 'to_dict') and hasattr(obj, '__uuid__'):
                 # the object knows how to dismantle itself into a json string
                 if obj.__uuid__ not in self.uuid_cache:
