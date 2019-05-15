@@ -748,3 +748,20 @@ class PyEMMAFeaturizerCV(MSMBFeaturizerCV):
             'topology': self.topology,
             'kwargs': self.kwargs
         }
+
+def NegativeCV(cv):
+    """Convenience for creating CVs that are the negative of another CV.
+
+    Current analysis in OPS requires that CVs be increasing. For a
+    transition where the natural CV is decreasing, the CV can be made to be
+    increasing by taking the negative of it. This just makes that process a
+    one-liner.
+
+    Parameters
+    ----------
+    cv : :class:`.CollectiveVariable`
+        the CV to use negative values for
+    """
+    name = "-" + cv.name
+    f = lambda snap: -cv(snap)
+    return FunctionCV(name, f)
