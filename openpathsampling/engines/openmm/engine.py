@@ -6,6 +6,7 @@ import simtk.openmm.app
 import simtk.unit as u
 
 from openpathsampling.engines import DynamicsEngine, SnapshotDescriptor
+from openpathsampling.engines.trajectory import Trajectory
 from .snapshot import Snapshot
 import numpy as np
 
@@ -444,6 +445,40 @@ class OpenMMEngine(DynamicsEngine):
         self.simulation.step(self.n_steps_per_frame)
         self._current_snapshot = None
         return self.current_snapshot
+
+    def get_checkpointed_trajectory(self, checkpoints):
+        from openpathsampling.netcdfplus import LoaderProxy
+        from openpathsampling import Storage  # avoid import order problems
+        basename = checkpoints.checkpoint_basename(self, 'generate')
+        storage = Storage(basename + '-trajectory.nc', 'r')
+        trajectory = storage.trajectories[-1]
+        # TODO: messy unproxy here (if JHP's unproxy code works, the
+        # following can be simplified to trajectory.unproxy())
+        for idx, snapshot in enumerate(trajectory.iter_proxies()):
+            if issubclass(type(snapshot), LoaderProxy):
+                subj = snapshot.__subject__
+                list.__setitem__(trajectory, idx, subj)
+                if hasattr(subj, '_lazy'):
+                    for attr, value in subj._lazy.items():
+                        if hasattr(value, '__subject__'):
+                            subj._lazy[attr] = value.__subject__
+                            # assuming only one layer, don't need recursion
+
+        storage.close()
+        return trajectory
+
+    def save_trajectory_checkpoint(self, trajectory, checkpoints):
+        from openpathsampling import Storage  # avoid import order problems
+        import os.path
+        basename = checkpoints.checkpoint_basename(self, 'generate')
+        filename = basename + "-trajectory.nc"
+        # why doesn't open in 'a' work if file not there?
+        if os.path.exists(filename):
+            storage = Storage(basename + '-trajectory.nc', 'a')
+        else:
+            storage = Storage(basename + '-trajectory.nc', 'w')
+        storage.save(Trajectory(trajectory))
+        storage.close()
 
     def minimize(self):
         self.simulation.minimizeEnergy()

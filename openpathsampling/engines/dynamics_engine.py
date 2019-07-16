@@ -148,6 +148,7 @@ class DynamicsEngine(StorableNamedObject):
         self.descriptor = descriptor
         self._check_options(options)
         self.interrupter = DelayedInterrupt
+        self.checkpoint_frequency = 10
 
     @property
     def current_snapshot(self):
@@ -381,7 +382,28 @@ class DynamicsEngine(StorableNamedObject):
 
         return stop
 
-    def generate(self, snapshot, running=None, direction=+1):
+    def get_checkpointed_trajectory(self, checkpoints):
+        raise NotImplementedError("This engine does not support checkpointing")
+
+    def save_trajectory_checkpoint(self, trajectory, checkpoints):
+        raise NotImplementedError("This engine does not support checkpointing")
+
+    def generate_from_checkpoint(self, snapshot, running=None, direction=+1,
+                                 checkpoint=None):
+        r"""Use a checkpoint to start up the dynamics
+        """
+        if checkpoint is None:
+            initial = snapshot
+        else:
+            print("Getting checkpointed trajectory")
+            initial = self.get_checkpointed_trajectory(checkpoint)
+
+        print("Generating from:", initial)
+
+        return self.generate(initial, running, direction)
+
+    def generate(self, snapshot, running=None, direction=+1,
+                 checkpoints=None):
         r"""
         Generate a trajectory consisting of ntau segments of tau_steps in
         between storage of Snapshots.
@@ -398,6 +420,9 @@ class DynamicsEngine(StorableNamedObject):
             momenta of the given snapshot and then prepending generated
             snapshots with reversed momenta. This will generate a _reversed_
             trajectory that effectively ends in the initial snapshot
+        checkpoints : :class:`.StepCheckpoints`
+            checkpointing object, knows how/where to save the checkpointed
+            trajectory
 
         Returns
         -------
@@ -418,7 +443,8 @@ class DynamicsEngine(StorableNamedObject):
             running,
             direction,
             intervals=0,
-            max_length=self.options['n_frames_max'])
+            max_length=self.options['n_frames_max'],
+            checkpoints=checkpoints)
 
         for trajectory in it:
             pass
@@ -426,7 +452,7 @@ class DynamicsEngine(StorableNamedObject):
         return trajectory
 
     def iter_generate(self, initial, running=None, direction=+1,
-                      intervals=10, max_length=0):
+                      intervals=10, max_length=0, checkpoints=None):
         r"""
         Return a generator that will generate a trajectory, returning the
         current trajectory in given intervals
@@ -450,6 +476,9 @@ class DynamicsEngine(StorableNamedObject):
         max_length : int
             will limit the simulation length to a number of steps. Default is
             `0` which will run unlimited
+        checkpoints : :class:`.StepCheckpoints`
+            checkpointing object, knows how/where to save the checkpointed
+            trajectory
 
         Yields
         ------
@@ -527,6 +556,11 @@ class DynamicsEngine(StorableNamedObject):
             has_error = False
 
             while not stop:
+                if checkpoints and (frame % self.checkpoint_frequency == 0):
+                    logger.info("Checkpointing trajectory after %d steps",
+                                frame)
+                    self.save_trajectory_checkpoint(trajectory, checkpoints)
+
                 if intervals > 0 and frame % intervals == 0:
                     # return the current status
                     logger.info("Through frame: %d", frame)
@@ -534,6 +568,7 @@ class DynamicsEngine(StorableNamedObject):
 
                 elif frame % log_rate == 0:
                     logger.info("Through frame: %d", frame)
+
 
                 # Do integrator x steps
 
