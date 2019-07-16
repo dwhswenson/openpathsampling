@@ -382,25 +382,26 @@ class DynamicsEngine(StorableNamedObject):
 
         return stop
 
-    def get_checkpointed_trajectory(self, checkpoints):
+    def _get_checkpointed_trajectory(self, checkpoints):
         raise NotImplementedError("This engine does not support checkpointing")
 
-    def save_trajectory_checkpoint(self, trajectory, checkpoints):
+    def _save_trajectory_checkpoint(self, trajectory, checkpoints):
         raise NotImplementedError("This engine does not support checkpointing")
 
     def generate_from_checkpoint(self, snapshot, running=None, direction=+1,
-                                 checkpoint=None):
+                                 checkpoints=None):
         r"""Use a checkpoint to start up the dynamics
         """
         if checkpoint is None:
             initial = snapshot
         else:
-            print("Getting checkpointed trajectory")
-            initial = self.get_checkpointed_trajectory(checkpoint)
+            logger.info("Getting checkpointed trajectory")
+            initial = self._get_checkpointed_trajectory(checkpoints)
 
-        print("Generating from:", initial)
+        logger.info("Generating from initial trajectory length %d",
+                    len(initial))
 
-        return self.generate(initial, running, direction)
+        return self.generate(initial, running, direction, checkpoints)
 
     def generate(self, snapshot, running=None, direction=+1,
                  checkpoints=None):

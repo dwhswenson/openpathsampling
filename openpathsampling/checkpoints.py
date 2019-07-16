@@ -1,4 +1,5 @@
 import os.path
+import shutil
 import json
 
 def has_uuid(obj):
@@ -7,9 +8,34 @@ def has_uuid(obj):
 def get_uuid(obj):
     return getattr(obj, '__uuid__', None)
 
+def as_uuid(obj):
+    """Returns the UUID if it has one, otherwise assumes input *is* the UUID
+
+    Parameters
+    ----------
+    obj : UUID (int) or object with a UUID
+        the thing to extract a UUID from
+
+    Returns
+    -------
+    int :
+        the UUID
+    """
+    return getattr(obj, '__uuid__', obj)
+
 
 class StepCheckpoints(object):
-    """A separate Checkpi
+    """Per-step information about checkpointing.
+
+    This is the object that is used internally. Usually the user won't need
+    to use this, because :class:`.Checkpointing` is a factory that creates
+    instances of this.
+
+    Parameters
+    ----------
+    directory : str
+        Directory where the checkpoint files will be kept. Must not exist
+        before this is made.
     """
     def __init__(self, directory):
         self.directory = directory
@@ -17,10 +43,35 @@ class StepCheckpoints(object):
         os.mkdir(self.directory)
 
     def checkpoint_basename(self, obj, method, sequence_number=None):
+        """Directory and basename for data related to a checkpoint file.
+
+        The basename is of the format $DIRECTORY/$UUID-$METHOD-$NUMBER where
+        the $UUID is the UUID of an object, the $METHOD is the name of the
+        method being checkpointed, and the $NUMBER is the number in sequence
+        of checkpoints in this step.
+
+        Extensions can be added by client code.
+
+        Parameters
+        ----------
+        obj : UUID-containing object or UUID
+            the object or UUID for the UUID part of the filename
+        method : str
+            name of the method to be checkpointed
+        sequence_number : int or None
+            if None, the internal counter is used to set the sequence
+            number
+
+        Returns
+        -------
+        str :
+            the basename for checkpoint files
+        """
         if sequence_number is None:
             sequence_number = self.sequence_number
-        fname = str(get_uuid(obj)) + str(method) + str(sequence_number)
-        return os.path.join(self.directory, str(get_uuid(obj)) + str(method))
+        fname = (str(as_uuid(obj)) + "-" + str(method) + "-"
+                 + str(sequence_number))
+        return os.path.join(self.directory, fname)
 
     def write_checkpoint(self, obj, method, checkpoint_data, next_checkpoint):
         dct = {'data': dict(checkpoint_data),
@@ -58,6 +109,15 @@ class StepCheckpoints(object):
             self.sequence_number += 1
 
     def delete_checkpoint(self):
+        """Removes all files from the checkpoint.
+
+        Warning
+        -------
+
+        Do not put other files in the directory for a checkpoint while the
+        simulation is running! All files will be deleted when the step
+        completes and is saved to disk.
+        """
         shutil.rmtree(self.directory)
 
 

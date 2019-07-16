@@ -4,9 +4,11 @@
 from __future__ import division
 from __future__ import absolute_import
 
+
 from builtins import range
 from builtins import object
 from past.utils import old_div
+import tempfile
 import numpy as np
 import simtk.openmm as mm
 from nose.tools import (assert_equal)
@@ -257,3 +259,11 @@ class TestOpenMMEngine(object):
 
         # make sure there is no change!
         assert_equal(init_samp[0].trajectory, init_traj)
+
+    def test_checkpointing(self):
+        # integration test that checkpointing works
+        chkpt_dir = tempfile.mkdtemp()
+        checkpoints = paths.checkpoints.StepCheckpoints(chkpt_dir)
+        self.engine.checkpoint_frequency = 3
+
+        pass

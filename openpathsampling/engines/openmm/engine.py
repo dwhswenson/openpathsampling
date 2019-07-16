@@ -446,7 +446,7 @@ class OpenMMEngine(DynamicsEngine):
         self._current_snapshot = None
         return self.current_snapshot
 
-    def get_checkpointed_trajectory(self, checkpoints):
+    def _get_checkpointed_trajectory(self, checkpoints):
         from openpathsampling.netcdfplus import LoaderProxy
         from openpathsampling import Storage  # avoid import order problems
         basename = checkpoints.checkpoint_basename(self, 'generate')
@@ -467,7 +467,7 @@ class OpenMMEngine(DynamicsEngine):
         storage.close()
         return trajectory
 
-    def save_trajectory_checkpoint(self, trajectory, checkpoints):
+    def _save_trajectory_checkpoint(self, trajectory, checkpoints):
         from openpathsampling import Storage  # avoid import order problems
         import os.path
         basename = checkpoints.checkpoint_basename(self, 'generate')

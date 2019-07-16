@@ -40,5 +40,24 @@ you automatically get:
 * ??? TODO: can we make MDTraj CV support automated as well? Check for topol
   on first run? ???
 
+Checkpoints and restarting
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+If your engine is likely to create very long trajectories (in wall time), it
+is possible that your users may need to use more than one cluster job to
+complete the trajectory. OPS engines have a ``checkpoint_frequency``
+attribute; if checkpointing is enabled, all the frames since the last
+checkpoint should be saved every ``checkpoint_frequency`` frames.  You can
+enable OPS's checkpointing by adding two methods:
 
+* :meth:`._save_trajectory_checkpoint`, which takes an OPS trajectory and a
+  :class:`.StepCheckpoints` object and saves the trajectory. The
+  :class:`.StepCheckpoints` object knows where OPS saves checkpoint files
+  (use its :meth:`.checkpoint_basename` method to get a basename). This
+  method does not return anything, but should ensure that the most recent
+  trajectory segment is saved to disk.
+* :meth:`._get_checkpointed_trajectory`, which takes the
+  :class:`.StepCheckpoints` object and loads the most recent checkpointed
+  trajectory.
+
+TODO: External engines should support this automatically.
