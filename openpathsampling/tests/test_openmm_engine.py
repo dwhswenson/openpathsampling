@@ -9,6 +9,7 @@ from builtins import range
 from builtins import object
 from past.utils import old_div
 import tempfile
+import os
 import numpy as np
 import simtk.openmm as mm
 from nose.tools import (assert_equal)
@@ -262,8 +263,29 @@ class TestOpenMMEngine(object):
 
     def test_checkpointing(self):
         # integration test that checkpointing works
+        # NOTE: aspects of this test depend on the internal implementation
+        # of the trajectory checkpointing, which isn't guaranteed by the API
         chkpt_dir = tempfile.mkdtemp()
+        os.rmdir(chkpt_dir)  # only needed the name
         checkpoints = paths.checkpoints.StepCheckpoints(chkpt_dir)
+        self.engine.options['n_frames_max'] = 8
         self.engine.checkpoint_frequency = 3
-
-        pass
+        original = self.engine.generate(
+            template,
+            paths.LengthEnsemble(7).can_append,
+            checkpoints=checkpoints
+        )
+        basename = checkpoints.checkpoint_basename(self.engine, 'generate')
+        filename = basename + "-trajectory.nc"
+        regenerated = self.engine.generate_from_checkpoint(
+            template,
+            paths.LengthEnsemble(7).can_append,
+            checkpoints=checkpoints
+        )
+        # simple tests depedning on internals
+        assert len(set(original) & set(regenerated)) == 4
+        assert len(set(original) - set(regenerated)) == 3
+        # stricter tests that should survive different setups
+        assert np.allclose(original.xyz[:4], regenerated.xyz[:4])
+        for i in range(4, 7):
+            assert not np.allclose(original.xyz[i], regenerated.xyz[i])

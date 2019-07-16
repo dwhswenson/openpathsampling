@@ -392,7 +392,7 @@ class DynamicsEngine(StorableNamedObject):
                                  checkpoints=None):
         r"""Use a checkpoint to start up the dynamics
         """
-        if checkpoint is None:
+        if checkpoints is None:
             initial = snapshot
         else:
             logger.info("Getting checkpointed trajectory")
@@ -560,7 +560,7 @@ class DynamicsEngine(StorableNamedObject):
                 if checkpoints and (frame % self.checkpoint_frequency == 0):
                     logger.info("Checkpointing trajectory after %d steps",
                                 frame)
-                    self.save_trajectory_checkpoint(trajectory, checkpoints)
+                    self._save_trajectory_checkpoint(trajectory, checkpoints)
 
                 if intervals > 0 and frame % intervals == 0:
                     # return the current status
