@@ -29,7 +29,7 @@ except ImportError:  # pragma: no cover
         version.full_version += ".dev-" + version.git_version[:7]
     isrelease = str(ops_setup.preferences['released'])
 
-from . import checkpoints
+from . import checkpointing
 
 from .analysis.path_histogram import PathDensityHistogram
 

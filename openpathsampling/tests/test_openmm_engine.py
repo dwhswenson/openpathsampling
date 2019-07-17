@@ -267,7 +267,7 @@ class TestOpenMMEngine(object):
         # of the trajectory checkpointing, which isn't guaranteed by the API
         chkpt_dir = tempfile.mkdtemp()
         os.rmdir(chkpt_dir)  # only needed the name
-        checkpoints = paths.checkpoints.StepCheckpoints(chkpt_dir)
+        checkpoints = paths.checkpointing.StepCheckpoints(chkpt_dir)
         self.engine.options['n_frames_max'] = 8
         self.engine.checkpoint_frequency = 3
         original = self.engine.generate(
