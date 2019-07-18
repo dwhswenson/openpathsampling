@@ -32,14 +32,26 @@ class TestStepCheckpoints(object):
     # TODO: add more tests for reading/writing
 
 
-class Checkpointing(object):
+class TestCheckpointing(object):
     def setup(self):
-        pass
+        self.tmpdir = tempfile.mkdtemp()
+        self.sim = mock.NonCallableMock(__uuid__="SIM-UUID")
+        self.checkpointing = Checkpointing(root_dir=self.tmpdir)
+
+    def test_default_init(self):
+        checkpointing = Checkpointing()
+        assert checkpointing.root_dir == ".ops_checkpoints"
 
     def test_init(self):
-        pass
+        assert self.checkpointing.root_dir == self.tmpdir
 
     def test_make_checkpoint_writer(self):
-        pass
+        writer = self.checkpointing.make_checkpoint_writer(self.sim, 10)
+        writer_dir = writer.directory
+        head, number_dir = os.path.split(writer_dir)
+        root, sim_dir = os.path.split(head)
+        assert root == self.checkpointing.root_dir
+        assert sim_dir == get_uuid(self.sim)
+        assert number_dir == str(10)
 
 

@@ -40,7 +40,7 @@ class StepCheckpoints(object):
     def __init__(self, directory):
         self.directory = directory
         self.sequence_number = 0
-        os.mkdir(self.directory)
+        os.makedirs(self.directory)
 
     def checkpoint_basename(self, obj, method, sequence_number=None):
         """Directory and basename for data related to a checkpoint file.
@@ -131,7 +131,7 @@ class Checkpointing(object):
         self.root_dir = root_dir
 
     def make_checkpoint_writer(self, simulation, step):
-        directory = os.path.join(root_dir, str(get_uuid(simulation)),
+        directory = os.path.join(self.root_dir, str(get_uuid(simulation)),
                                  str(step))
         return self.Writer(directory)
 
