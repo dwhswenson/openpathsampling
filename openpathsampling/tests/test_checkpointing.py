@@ -12,6 +12,11 @@ class TestStepCheckpoints(object):
         self.directory = os.path.join(tmpdir, "checkpoints")
         self.checkpoints = StepCheckpoints(self.directory)
 
+    def test_init_directory_exists(self):
+        # we expect failure if the directory exists
+        with pytest.raises(FileExistsError):
+            checkpoints = StepCheckpoints(self.directory)
+
     @pytest.mark.parametrize('sequence_number,expected',
                              [(None, 'foo-bar-0'), (5, 'foo-bar-5')],
                              ids=["None", "5"])

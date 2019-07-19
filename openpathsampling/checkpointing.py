@@ -123,6 +123,13 @@ class StepCheckpoints(object):
 
 class Checkpointing(object):
     """User-facing class for checkpoint management.
+
+    Parameters
+    ----------
+    root_dir : str
+        The name of the directory in which checkpoint data should be stored.
+        Default input (None) uses a directory '.ops_checkpoints' within the
+        current working directory.
     """
     Writer = StepCheckpoints
     def __init__(self, root_dir=None):
@@ -131,6 +138,22 @@ class Checkpointing(object):
         self.root_dir = root_dir
 
     def make_checkpoint_writer(self, simulation, step):
+        """Create the actual checkpoint writer; one per simulation step.
+
+        Parameters
+        ----------
+        simulation : object with UUID
+            Usually the :class:`.PathSimulator`. The UUID of this object is
+            used as the outer directory in which checkpoints are kept.
+        step : int
+            The step number; used for an inner directory to store checkpoint
+            files.
+
+        Returns
+        -------
+        class:`.StepCheckpoints` :
+            object to manage checkpoints for this simulation step
+        """
         directory = os.path.join(self.root_dir, str(get_uuid(simulation)),
                                  str(step))
         return self.Writer(directory)
