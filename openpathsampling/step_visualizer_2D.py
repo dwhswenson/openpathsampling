@@ -1,7 +1,33 @@
+import time
 import matplotlib
 import matplotlib.pyplot as plt
 
 import openpathsampling as paths
+
+def add_trajectory(ax, x, y, color, accepted=True, **kwargs):
+    ax.plot(x, y, color=color, **kwargs)  # trajectory
+    face_color = color if accepted else 'none'
+    ax.plot(x[-1], y[-1], marker='o', markeredgecolor=color,
+            markerfacecolor=face_color)  # "arrowhead"
+    return ax
+
+class MCStepNumberArtist(object):
+    def __init__(self, x, y, prefix=None, suffix=None, **kwargs):
+        self.x = x
+        self.y = y
+        self.kwargs = kwargs
+        if prefix is None:
+            prefix = ""
+        if suffix is None:
+            suffix = ""
+        self.prefix = prefix
+        self.suffix = suffix
+
+    def __call__(self, ax, step):
+        stepnum = step.mccycle
+        ax.text(self.x, self.y, self.prefix + str(stepnum) + self.suffix,
+                **self.kwargs)
+
 
 class StepVisualizer2D(object):
     def __init__(self, network, cv_x, cv_y, xlim, ylim, output_directory=None):
@@ -13,6 +39,7 @@ class StepVisualizer2D(object):
         self.output_directory = output_directory
         self.background = None
         self._save_bg_axes = None
+        self.extra_artists = []
 
         self.fig = None
 
@@ -44,32 +71,32 @@ class StepVisualizer2D(object):
             zorder=5
         )
 
+    def _draw_list_of_samples(self, list_of_samples, accepted, linewidth,
+                              zorder):
+        for sample in list_of_samples:
+            if sample.ensemble in self.ensemble_colors:
+                self.ax = add_trajectory(
+                    ax=self.ax,
+                    x=self.cv_x(sample.trajectory),
+                    y=self.cv_y(sample.trajectory),
+                    accepted=accepted,
+                    color=self.ensemble_colors[sample.ensemble],
+                    linewidth=linewidth,
+                    zorder=zorder
+                )
+
+
     def draw_samples(self, samples, accepted=True):
         self.draw_background()
-        for sample in samples:
-            if sample.ensemble in self.ensemble_colors:
-                self.ax.plot(
-                    self.cv_x(sample.trajectory),
-                    self.cv_y(sample.trajectory),
-                    linewidth=2, zorder=2,
-                    color=self.ensemble_colors[sample.ensemble]
-                )
-                # draw arrowheads at the end of each active
-                self.draw_arrowhead(sample, accepted=accepted)
+        self._draw_list_of_samples(samples, accepted, linewidth=2, zorder=2)
         return self.fig
 
     def draw_trials(self, change):
         if self.fig != self.background:
             self.draw_background()
-        for trial in change.trials:
-            self.ax.plot(
-                self.cv_x(trial.trajectory),
-                self.cv_y(trial.trajectory),
-                linewidth=1.0, zorder=3,
-                color=self.ensemble_colors[trial.ensemble]
-            )
-            # draw arrowheads at the end of each trial
-            self.draw_arrowhead(trial, accepted=False)
+        self._draw_list_of_samples(change.trials, accepted=False,
+                                   linewidth=1, zorder=3)
+
         return self.fig
 
 
@@ -90,12 +117,13 @@ class StepVisualizer2D(object):
 
         self.ax.set_xlim(self.xlim)
         self.ax.set_ylim(self.ylim)
-        return
 
 
     def draw(self, mcstep):
         self.draw_samples(mcstep.active)
         self.draw_trials(mcstep.change)
+        for artist in self.extra_artists:
+            artist(self.ax, mcstep)
         return self.fig
 
 
@@ -108,7 +136,12 @@ class StepVisualizer2D(object):
             IPython.display.clear_output(wait=True)
             fig = self.draw(mcstep)
             IPython.display.display(fig);
-            plt.close() # prevents crap in the output
+            plt.close()  # prevents crap in the output
+
+    def replay_ipynb(self, steps, delay=0.1):
+        for step in steps:
+            self.draw_ipynb(step)
+            time.sleep(delay)
 
     def draw_png(self, mcstep):
         pass
