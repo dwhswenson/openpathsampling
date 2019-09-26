@@ -92,7 +92,11 @@ class OpenMMEngine(DynamicsEngine):
             the openmm integrator object
         openmm_properties : dict
             optional setting for creating the openmm simuation object. Typical
-            keys include GPU floating point precision
+            keys include GPU floating point precision.
+            Note that by default the engine selects the fastest currently
+            available OpenMM platform.
+            If you want to specify the platform you will have to call
+            `engine.initialize(platform)` after creating the engine.
         options : dict
             a dictionary that provides additional settings for the OPS engine.
             Allowed are
@@ -102,16 +106,13 @@ class OpenMMEngine(DynamicsEngine):
                 'n_frames_max' : int or None, default: 5000,
                     the maximal number of frames allowed for a returned
                     trajectory object
-                `platform` : str, default: `fastest`,
-                    the openmm specification for the platform to be used,
-                    also 'fastest' is allowed   which will pick the currently
-                    fastest one available
 
         Notes
         -----
-        the `n_frames_max` does not limit Trajectory objects in length. It only
+        The `n_frames_max` does not limit Trajectory objects in length. It only
         limits the maximal length of returned trajectory objects when this
         engine is used.
+
         """
 
         self.system = system
@@ -152,7 +153,7 @@ class OpenMMEngine(DynamicsEngine):
             openmm_properties=None,
             options=None):
         """
-        Create a new engine from existing, but different optionsor integrator
+        Create a new engine from existing, but different options or integrator
 
         Parameters
         ----------
@@ -160,7 +161,11 @@ class OpenMMEngine(DynamicsEngine):
             the openmm integrator object
         openmm_properties : dict
             optional setting for creating the openmm simuation object. Typical
-            keys include GPU floating point precision
+            keys include GPU floating point precision.
+            Note that by default the engine selects the fastest currently
+            available OpenMM platform.
+            If you want to specify the platform you will have to call
+            `engine.initialize(platform)` after creating the engine.
         options : dict
             a dictionary that provides additional settings for the OPS engine.
             Allowed are
@@ -170,10 +175,6 @@ class OpenMMEngine(DynamicsEngine):
                 'n_frames_max' : int or None, default: 5000,
                     the maximal number of frames allowed for a returned
                     trajectory object
-                `platforms` : list of str,
-                    the openmm specification for the platform to be used,
-                    also 'fastest' is allowed which will pick the currently
-                    fastest one available
 
         Notes
         -----
@@ -262,8 +263,9 @@ class OpenMMEngine(DynamicsEngine):
 
         Parameters
         ----------
-        platform : str or `simtk.openmm.Platform`
-            either a string with a name of the platform a platform object
+        platform : str or `simtk.openmm.Platform` or None
+            either a string with a name of the platform or a platform object
+            if None it will default to the fastest currently available platform
 
         Notes
         -----
@@ -424,12 +426,12 @@ class OpenMMEngine(DynamicsEngine):
             # if snapshot.coordinates is not None:
             self.simulation.context.setPositions(snapshot.coordinates)
 
-            # if snapshot.box_vectors is not None:
-            self.simulation.context.setPeriodicBoxVectors(
-                snapshot.box_vectors[0],
-                snapshot.box_vectors[1],
-                snapshot.box_vectors[2]
-            )
+            if snapshot.box_vectors is not None:
+                self.simulation.context.setPeriodicBoxVectors(
+                    snapshot.box_vectors[0],
+                    snapshot.box_vectors[1],
+                    snapshot.box_vectors[2]
+                )
 
             # if snapshot.velocities is not None:
             self.simulation.context.setVelocities(snapshot.velocities)
@@ -518,7 +520,7 @@ class OpenMMEngine(DynamicsEngine):
         if position_tol is None:
             position_tol = context.getIntegrator().getConstraintTolerance()
         # default 1e-5 for velocity_tol comes from OpenMM's setVelToTemp
-        context.applyConstraints(position_tol)  
+        context.applyConstraints(position_tol)
         context.applyVelocityConstraints(velocity_tol)
         result_snap = self.current_snapshot
         if old_snap is not None:
