@@ -610,7 +610,7 @@ class SampleMover(PathMover):
 
     def move(self, sample_set, checkpoints=None):
         samples = self.get_samples_from_sample_set(sample_set)
-        # TODO: checkpoint here
+        # TODO: checkpoint here (samples)
         change = self.move_core(samples, checkpoints)
         return change
 
@@ -782,7 +782,7 @@ class EngineMover(SampleMover):
         initial_trajectory = input_sample.trajectory
         shooting_index = self.selector.pick(initial_trajectory)
 
-        # TODO: checkpoint here
+        # TODO: checkpoint here (shooting_index)
         try:
             trial_trajectory, run_details = self._run(initial_trajectory,
                                                       shooting_index,
@@ -1586,7 +1586,13 @@ class SelectionMover(PathMover):
     def move(self, sample_set, checkpoints=None):
         weights = self._selector(sample_set)
         mover, details = self.select_mover(weights)
-        # TODO: add checkpoint here
+
+        # TODO checkpoint here (mover, details)
+        # select_mover = checkpoint_data(self.select_mover, checkpoints
+                                       # ['mover', 'details'])
+        # mover, details = select_mover(weights)
+        # subchange = checkpointed(mover.move, checkpoints)(sample_set)
+
         subchange = mover.move(sample_set, checkpoints=checkpoints)
 
         path = paths.RandomChoiceMoveChange(
@@ -1894,7 +1900,7 @@ class SequentialMover(PathMover):
 
         for mover in self.movers:
             logger.debug("Starting sequential move step " + str(mover))
-            # TODO: checkpoint here
+            # TODO: checkpoint here (subglobal?)
 
             # Run the sub mover
             movepath = mover.move(subglobal, checkpoints=checkpoints)
@@ -1940,7 +1946,7 @@ class PartialAcceptanceSequentialMover(SequentialMover):
                         + " starting mover index " + str(self.movers.index(mover))
                         + " (" + mover.name + ")"
                        )
-            # TODO: checkpoint here
+            # TODO: checkpoint here (subglobal?)
 
             # Run the sub mover
             movepath = mover.move(subglobal, checkpoints=checkpoints)
@@ -1981,7 +1987,7 @@ class ConditionalSequentialMover(SequentialMover):
         for mover in self.movers:
             logger.debug("Starting sequential move step " + str(mover))
 
-            # TODO: checkpoint here
+            # TODO: checkpoint here (subglobal)
 
             # Run the sub mover
             movepath = mover.move(subglobal, checkpoints=checkpoints)
@@ -2087,7 +2093,7 @@ class SubPathMover(PathMover):
         return [replica_states]
 
     def move(self, sample_set, checkpoints=None):
-        # TODO: checkpoint here
+        # TODO: checkpoint here (sample_set?)
         subchange = self.mover.move(sample_set, checkpoints=checkpoints)
         change = paths.SubMoveChange(
             subchange=subchange,
@@ -2171,7 +2177,7 @@ class SpecializedRandomChoiceMover(RandomChoiceMover):
     def move_core(self, samples, checkpoints=None):
         weights = self.weights
         mover, details = self.select_mover(weights)
-        # TODO checkpoint here
+        # TODO checkpoint here  (mover, details)
         subchange = mover.move_core(samples, checkpoints=checkpoints)
         change = paths.RandomChoiceMoveChange(
             subchange=subchange,
