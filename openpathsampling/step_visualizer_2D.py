@@ -3,6 +3,8 @@ import matplotlib
 import matplotlib.pyplot as plt
 
 import openpathsampling as paths
+import logging
+logger = logging.getLogger(__name__)
 
 def add_trajectory(ax, x, y, color, accepted=True, **kwargs):
     ax.plot(x, y, color=color, **kwargs)  # trajectory
@@ -131,7 +133,7 @@ class StepVisualizer2D(object):
         try:
             import IPython.display
         except ImportError:
-            pass
+            logger.info("Not in IPython")
         else:
             IPython.display.clear_output(wait=True)
             fig = self.draw(mcstep)
