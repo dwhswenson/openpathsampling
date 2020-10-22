@@ -271,6 +271,12 @@ class OuterWalls(PES):
         self.x0 = np.array(x0)
         self._local_dVdx = np.zeros(self.x0.size)
 
+    def to_dict(self):
+        dct = super(OuterWalls, self).to_dict()
+        dct['x0'] = dct['x0'].tolist()
+        dct['sigma'] = dct['sigma'].tolist()
+        return dct
+
     def __repr__(self):  # pragma: no cover
         return "OuterWalls({o.sigma}, {o.x0})".format(o=self)
 
