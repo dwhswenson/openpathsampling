@@ -246,7 +246,7 @@ class NetCDFPlus(netCDF4.Dataset):
                 "Open existing netCDF file '%s' for reading - "
                 "reading from existing file", filename)
 
-        self.filename = filename
+        self._filename = os.path.abspath(filename)
         self.fallback = fallback
 
         # this can be set to false to re-store objects present in the fallback
@@ -369,6 +369,10 @@ class NetCDFPlus(netCDF4.Dataset):
         self.simplifier = UUIDObjectJSON(self)
 
     @property
+    def filename(self):
+        return self._filename
+
+    @property
     def file_size(self):
         return os.path.getsize(self.filename)
 
@@ -384,8 +388,15 @@ class NetCDFPlus(netCDF4.Dataset):
 
     @staticmethod
     def _cmp_version(v1, v2):
-        q1 = v1.split('-')[0].split('.')
-        q2 = v2.split('-')[0].split('.')
+        # we only look at x.y.z parts
+        def version_parts(v):
+            return v.split('-')[0].split('+')[0].split('.')[:3]
+        q1 = version_parts(v1)
+        q2 = version_parts(v2)
+        # q1 = v1.split('.')[:3]
+        # q2 = v2.split('.')[:3]
+        # q1 = v1.split('-')[0].split('.')
+        # q2 = v2.split('-')[0].split('.')
         for v1, v2 in zip(q1, q2):
             if int(v1) > int(v2):
                 return +1
