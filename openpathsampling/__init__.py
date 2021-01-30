@@ -172,6 +172,7 @@ from .collectivevariables import *
 from .pathmovers.move_schemes import *
 
 import openpathsampling.numerics as numerics
+import openpathsampling.beta
 
 from openpathsampling.engines import Trajectory, BaseSnapshot
 
