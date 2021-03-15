@@ -9,6 +9,12 @@ from .tools import flatten_all, nested_update, group_by_function
 from .tools import is_iterable, is_mappable, is_numpy_iterable
 from . import tools
 from .class_lookup import is_storage_iterable, is_storage_mappable
+from .proxy import GenericLazyLoader
+from .uuids import (
+    has_uuid, get_uuid, set_uuid, encode_uuid, decode_uuid, encoded_uuid_re,
+    is_uuid_string
+)
+
 
 # UUID recognition and encoding #####################################
 # Things in here might be modified for performance optimization. In
@@ -18,43 +24,6 @@ import sys
 if sys.version_info > (3, ):
     unicode = str
     long = int
-
-def has_uuid(obj):
-    return hasattr(obj, '__uuid__')
-
-
-def get_uuid(obj):
-    # TODO: I can come up with a better string encoding than this
-    try:
-        return str(obj.__uuid__)
-    except AttributeError as e:
-        if obj is None:
-            return obj
-        else:
-            raise e
-
-def set_uuid(obj, uuid):
-    obj.__uuid__ = long(uuid)
-
-
-def encode_uuid(uuid):
-    return "UUID(" + str(uuid) + ")"
-
-
-def decode_uuid(uuid_str):
-    return uuid_str[5:-1]
-
-
-# use the regular expression when looking through an entire JSON string; use
-# the is_uuid_string method for individual objects
-encoded_uuid_re = re.compile("UUID\((?P<uuid>[\-]?[0-9]+)\)")
-
-
-def is_uuid_string(obj):
-    return (
-        isinstance(obj, (str, unicode))
-        and obj[:5] == 'UUID(' and obj[-1] == ')'
-    )
 
 
 # Getting the list of UUIDs bsed on initial objets ###################
@@ -91,6 +60,24 @@ def unique_objects(object_list):
             # or is_storage_iterable(obj))
 
 def default_find_uuids(obj, cache_list):
+    """Default method for finding new UUIDs in an object. Recursive.
+
+    Parameters
+    ----------
+    obj : Any
+        the object to query for UUIDs
+    cache_list : List[Mapping]
+        caches that may contain existing UUIDs
+
+    Returns
+    -------
+    uuids : Dict[UUID, Any]
+        mapping of UUID to object for any UUID-containing objects found
+    new_objects : List[Any]
+        Non-UUID container objects (iterables, mappings) that may contain
+        futher UUIDs. Includes the dict from ``obj.to_dict()`` if ``obj``
+        has a UUID.
+    """
     uuids = {}
     new_objects = []
     obj_uuid = get_uuid(obj) if has_uuid(obj) else None
@@ -108,7 +95,6 @@ def default_find_uuids(obj, cache_list):
     if is_storage_mappable(obj):
         new_objects.extend(o for o in obj.keys() if has_uuid(o))
         new_objects.extend(obj.values())
-    # elif is_iterable(obj) and not is_numpy_iterable(obj):
     elif is_storage_iterable(obj):
         new_objects.extend(obj)
     return uuids, new_objects
@@ -147,6 +133,10 @@ def get_all_uuids(initial_object, known_uuids=None, class_info=None):
         # found_objs += collections.Counter(o.__class__.__name__)
                                           # for o in objects)
         for obj in objects:
+            # TODO: this might be slow; check performance
+            if isinstance(obj, GenericLazyLoader):
+                obj = obj.load()
+
             # TODO: find a way to ensure that objects doesn't go over
             # duplicates here; see lprofile of default_find_uuids to see how
             # often abort due to being in cache in there, and whether we
@@ -189,22 +179,6 @@ class SchemaFindUUIDs(object):
                 new_objects.extend(attr_obj)
 
         return uuids, new_objects
-
-
-# TODO: I think this can be removed (only used by get_all_uuid_string)
-# def find_dependent_uuids(json_dct):
-    # dct = json.loads(json_dct)
-    # uuids = [decode_uuid(obj) for obj in flatten_all(dct)
-             # if is_uuid_string(obj)]
-    # return uuids
-
-# TODO: I think this can be removed (not used?)
-# def get_all_uuid_strings(dct):
-    # all_uuids = []
-    # for uuid in dct:
-        # all_uuids.append(uuid)
-        # all_uuids += find_dependent_uuids(dct[uuid])
-    # return all_uuids
 
 
 # NOTE: this only need to find until the first UUID: iterables/mapping with
@@ -251,7 +225,7 @@ def replace_uuid(obj, uuid_encoding):
             replace_uuid(k, uuid_encoding): replace_uuid(v, uuid_encoding)
             for (k, v) in replacement.items()
         }
-    elif is_iterable(obj) and not is_numpy_iterable(obj):
+    elif is_storage_iterable(obj):
         replace_type = type(obj)
         replacement = replace_type([replace_uuid(o, uuid_encoding)
                                     for o in obj])
@@ -360,7 +334,7 @@ def from_dict_with_uuids(obj, cache_list):
         replacement = {from_dict_with_uuids(k, cache_list): \
                        from_dict_with_uuids(v, cache_list)
                        for (k, v) in obj.items()}
-    elif is_iterable(obj) and not is_numpy_iterable(obj):
+    elif is_storage_iterable(obj):
         replace_type = type(obj)
         replacement = replace_type([from_dict_with_uuids(o, cache_list)
                                     for o in obj])
@@ -368,6 +342,7 @@ def from_dict_with_uuids(obj, cache_list):
 
 
 def from_json_obj(uuid, table_row, cache_list):
+    # TODO: OBSOLETE?! I think this has been replaced by custom_json
     # NOTE: from_json only works with existing_uuids (DAG-ordering)
     dct = json.loads(table_row['json'])
     cls = import_class(dct.pop('__module__'), dct.pop('__class__'))
@@ -377,7 +352,7 @@ def from_json_obj(uuid, table_row, cache_list):
     return obj
 
 
-def _uuids_from_table_row(table_row, schema_entries):
+def _uuids_from_table_row(table_row, schema_entries, allow_lazy=True):
     """Gather UUIDs from a table row (as provided by storage).
 
     This organizes the UUIDS that are included in the table row based on
@@ -409,8 +384,8 @@ def _uuids_from_table_row(table_row, schema_entries):
         directly depends on (i.e., everything from ``uuid`` and ``lazy``).
     """
     # take the schema entries here, not the whole schema
-    lazy = set([])
     uuid = set([])
+    lazy = set([]) if allow_lazy else uuid
     for (attr, attr_type) in schema_entries:
         if attr_type == 'uuid':
             uuid.add(getattr(table_row, attr))
@@ -428,6 +403,9 @@ def _uuids_from_table_row(table_row, schema_entries):
         elif attr_type == 'lazy':
             lazy.add(getattr(table_row, attr))
         # other cases aren't UUIDs and are ignored
+
+    if lazy is uuid:
+        lazy = set([])
     # remove all cases of None as a UUID to depend on
     # TODO: should None be in the UUID list even?
     # TODO: can we return the set here?
@@ -435,13 +413,35 @@ def _uuids_from_table_row(table_row, schema_entries):
     return (list(uuid), lazy, dependencies)
 
 
-def get_all_uuids_loading(uuid_list, backend, schema, existing_uuids=None):
+def get_all_uuids_loading(uuid_list, backend, schema, existing_uuids=None,
+                          allow_lazy=True):
     """Get all information to reload from UUIDs.
 
     This is the main function for identifying objects to reload from
     storage. It returns the table rows to load (sorted by table), the UUIDs
     of objects to lazy-load (sorted by table), and the dictionary of
     dependencies, which can be used to create the reconstruction DAG.
+
+    Parameters
+    ----------
+    uuid_list : Iterable[str]
+        iterable of UUIDs
+    backend : :class:`.Backend`
+    schema : Dict
+    existing_uuids : Mapping[str, Any]
+        maps UUID to the relevant object
+
+    Returns
+    -------
+    to_load : List
+        list of table rows
+    lazy : Set[str]
+        set of lazy object UUIDs
+    dependencies : Dict[str, List[str]]
+        dependency mapping; maps UUID of an object to a list of the UUIDs it
+        depends on
+    uuid_to_table : Dict[str, str]
+        mapping of UUID to the name of the table that it is stored in
     """
     if existing_uuids is None:
         existing_uuids = {}
@@ -460,7 +460,11 @@ def get_all_uuids_loading(uuid_list, backend, schema, existing_uuids=None):
         uuid_list = []
         for row in new_table_rows:
             entries = schema[uuid_to_table[row.uuid]]
-            loc_uuid, loc_lazy, deps = _uuids_from_table_row(row, entries)
+            loc_uuid, loc_lazy, deps = _uuids_from_table_row(
+                table_row=row,
+                schema_entries=entries,
+                allow_lazy=allow_lazy
+            )
             uuid_list += loc_uuid
             lazy.update(loc_lazy)
             dependencies.update(deps)

@@ -26,8 +26,10 @@ from .serialization_helpers import get_uuid, get_all_uuids
 from .serialization_helpers import get_all_uuids_loading
 from .serialization_helpers import get_reload_order
 # from .serialization import Serialization
-from .serialization import ProxyObjectFactory
-from .tools import none_to_default
+from .proxy import ProxyObjectFactory, GenericLazyLoader
+from .storable_functions import StorageFunctionHandler, StorableFunction
+from .tags_table import TagsTable
+from .type_ident import STANDARD_TYPING
 
 try:
     basestring
@@ -40,17 +42,26 @@ logger = logging.getLogger(__name__)
 universal_schema = {
     'uuid': [('uuid', 'uuid'), ('table', 'int'), ('row', 'int')],
     'tables': [('name', 'str'), ('idx', 'int'), ('module', 'str'),
-               ('class_name', 'str')]
+               ('class_name', 'str')],
+    'tags': [('name', 'str'), ('content', 'uuid')]
 }
 
-class GeneralStorage(object):
+
+from openpathsampling.netcdfplus import StorableNamedObject
+class GeneralStorage(StorableNamedObject):
+    _known_storages = {}
     def __init__(self, backend, class_info, schema=None,
-                 simulation_classes=None, fallbacks=None):
+                 simulation_classes=None, fallbacks=None, safemode=False):
+        super().__init__()
+        GeneralStorage._known_storages[backend.identifier] = self
         self.backend = backend
-        self.schema = schema
-        self.class_info = class_info
-        self.mode = self.backend.mode
-        # TODO: implement fallbacks
+        self.schema = schema.copy()
+        self.class_info = class_info.copy()
+        self._safemode = None
+        self.safemode = safemode
+        self._sf_handler = StorageFunctionHandler(storage=self)
+        self.type_identification = STANDARD_TYPING  # TODO: copy
+        # TODO: implement fallback
         self.fallbacks = tools.none_to_default(fallbacks, [])
 
         self.simulation_classes = tools.none_to_default(simulation_classes,
@@ -58,6 +69,7 @@ class GeneralStorage(object):
 
         # self._pseudo_tables = {table_name: dict()
                                # for table_name in self.simulation_classes}
+        self._simulation_objects = {}
         self._pseudo_tables = {table_name: PseudoTable()
                                for table_name in self.simulation_classes}
         self._pseudo_tables['misc_simulation'] = PseudoTable()
@@ -65,25 +77,46 @@ class GeneralStorage(object):
         self._storage_tables = {}  # stores .steps, .snapshots
         # self.serialization = Serialization(self)
         self.proxy_factory = ProxyObjectFactory(self, self.class_info)
+        self.cache = MixedCache()
         if self.schema is None:
             self.schema = backend.schema
         self.cache = MixedCache({})  # initial empty cache so it exists
         self.initialize_with_mode(self.mode)
+        self.tags = TagsTable(self)
         self._simulation_objects = self._cache_simulation_objects()
         self.cache = MixedCache(self._simulation_objects)
         self._stashed = []
+        self._reset_fixed_cache()
+
+    @property
+    def mode(self):
+        return self.backend.mode
+
+    @property
+    def safemode(self):
+        return self._safemode
+
+    @safemode.setter
+    def safemode(self, value):
+        if value is self._safemode:
+            return
+        self.class_info.set_safemode(value)
 
     def initialize_with_mode(self, mode):
         if mode == 'r' or mode == 'a':
             self.register_schema(self.schema, class_info_list=[],
                                  read_mode=True)
             missing = {k: v for k, v in self.backend.schema.items()
-                       if k not in self.schema}
+                       if k not in self.schema and k not in universal_schema}
             self.schema.update(missing)
             table_to_class = self.backend.table_to_class
             self._load_missing_info_tables(table_to_class)
-            self._update_pseudo_tables({get_uuid(obj): obj
-                                        for obj in self.simulation_objects})
+            sim_objs = {get_uuid(obj): obj
+                        for obj in self.simulation_objects}
+            sim_objs.update({get_uuid(obj): obj
+                             for obj in self.storable_functions})
+            self._simulation_objects.update(sim_objs)
+            self._update_pseudo_tables(sim_objs)
 
         elif mode == 'w':
             self.register_schema(self.schema, class_info_list=[])
@@ -105,6 +138,10 @@ class GeneralStorage(object):
             raise RuntimeError("Unable to register existing database "
                                + "tables: " + str(missing_info_tables))
 
+    def register_from_tables(self, table_names, classes):
+        # override in subclass to handle special lookups
+        pass
+
     def stash(self, objects):
         objects = tools.listify(objects)
         self._stashed.extend(objects)
@@ -112,6 +149,7 @@ class GeneralStorage(object):
     def close(self):
         # TODO: should sync on close
         self.backend.close()
+        self._sf_handler.close()
         for fallback in self.fallbacks:
             fallback.close()
 
@@ -123,11 +161,17 @@ class GeneralStorage(object):
             # info.set_defaults(schema)
             # self.class_info.add_class_info(info)
 
-        if not read_mode:
-            # here's where we add the class_info to the backend
+        schema_types = [type_str for attr_list in schema.values()
+                        for _, type_str in attr_list]
+        for type_str in schema_types:
+            backend_type = self.class_info.backend_type(type_str)
+            self.backend.register_type(type_str, backend_type)
+
+        if not read_mode or self.backend.table_to_class == {}:
             table_to_class = {table: self.class_info[table].cls
                               for table in schema
                               if table not in ['uuid', 'tables']}
+            # here's where we add the class_info to the backend
             self.backend.register_schema(schema, table_to_class,
                                          backend_metadata)
 
@@ -135,7 +179,6 @@ class GeneralStorage(object):
         for table in self.schema:
             self._storage_tables[table] = StorageTable(self, table)
         # self.serialization.register_serialization(schema, self.class_info)
-
 
     def register_from_instance(self, lookup, obj):
         raise NotImplementedError("No way to register from an instance")
@@ -154,14 +197,58 @@ class GeneralStorage(object):
             uuids=list(uuid_dict.keys()),
             ignore_missing=True
         )
+
+        # "special" here indicates that we always try to re-save these, even
+        # if they've already been saved once. This is (currently) necessary
+        # for objects that contain mutable components (such as the way
+        # storable functions contain their results)
+        # TODO: make `special` customizable
+        special = set(self._sf_handler.canonical_functions.keys())
+
         for uuid_row in existing:
-            del uuid_dict[uuid_row.uuid]
+            uuid = uuid_row.uuid
+            if uuid not in special:
+                del uuid_dict[uuid_row.uuid]
 
         return uuid_dict
 
-    def save(self, obj_list):
+
+    def _uuids_by_table(self, input_uuids, cache, get_table_name):
+        # find all UUIDs we need to save with this object
+        logger.debug("Listing all objects to save")
+        uuids = {}
+        for uuid, obj in input_uuids.items():
+            uuids.update(get_all_uuids(obj, known_uuids=cache,
+                                       class_info=self.class_info))
+
+        logger.debug("Found %d objects" % len(uuids))
+        logger.debug("Deproxying proxy objects")
+        uuids = self._unproxy_lazies(uuids)
+
+        logger.debug("Checking if objects already exist in database")
+        uuids = self.filter_existing_uuids(uuids)
+
+        # group by table, then save appropriately
+        # by_table; convert a dict of {uuid: obj} to {table: {uuid: obj}}
+        by_table = collections.defaultdict(dict)
+        by_table.update(tools.dict_group_by(uuids,
+                                            key_extract=get_table_name))
+        return by_table
+
+    def _unproxy_lazies(self, uuid_mapping):
+        lazies = [uuid for uuid, obj in uuid_mapping.items()
+                  if isinstance(obj, GenericLazyLoader)]
+        logger.debug("Found " + str(len(lazies)) + " objects to deproxy")
+        loaded = self.load(lazies, allow_lazy=False)
+        uuid_mapping.update({get_uuid(obj): obj for obj in loaded})
+        return uuid_mapping
+
+
+    def save(self, obj_list, use_cache=True):
         if type(obj_list) is not list:
             obj_list = [obj_list]
+
+        cache = self.cache if use_cache else {}
         # TODO: convert the whole .save process to something based on the
         # class_info.serialize method (enabling per-class approaches for
         # finding UUIDs, which will be a massive serialization speed-up
@@ -171,31 +258,23 @@ class GeneralStorage(object):
         input_uuids = {get_uuid(obj): obj for obj in obj_list}
         input_uuids = self.filter_existing_uuids(input_uuids)
         if not input_uuids:
-            return  # exist early if everything is already in storage
-
-        # find all UUIDs we need to save with this object
-        logger.debug("Listing all objects to save")
-        uuids = {}
-        for uuid, obj in input_uuids.items():
-            uuids.update(get_all_uuids(obj, known_uuids=self.cache,
-                                       class_info=self.class_info))
-
-        logger.debug("Checking if objects already exist in database")
-        uuids = self.filter_existing_uuids(uuids)
-
-        # group by table, then save appropriately
-        # by_table; convert a dict of {uuid: obj} to {table: {uuid: obj}}
-        get_table_name = lambda uuid, obj_: self.class_info[obj_].table
-        by_table = tools.dict_group_by(uuids, key_extract=get_table_name)
+            return  # exit early if everything is already in storage
 
         # check default table for things to register; register them
+        # TODO: move to function: self.register_missing(by_table)
         # TODO: convert to while?
-        if '__missing__' in by_table:
+        get_table_name = lambda uuid, obj_: self.class_info[obj_].table
+        by_table = self._uuids_by_table(input_uuids, cache, get_table_name)
+        old_missing = {}
+        while '__missing__' in by_table:
             # __missing__ is a special result returned by the
             # ClassInfoContainer if this is object is expected to have a
             # table, but the table doesn't exist (e.g., for dynamically
             # added tables)
             missing = by_table.pop('__missing__')
+            if missing == old_missing:
+                raise RuntimeError("Unable to register: " + str(missing))
+            missing = self._unproxy_lazies(missing)
             logger.info("Registering tables for %d missing objects",
                         len(missing))
             self.register_missing_tables_for_objects(missing)
@@ -204,6 +283,24 @@ class GeneralStorage(object):
                         len(missing_by_table),
                         str(list(missing_by_table.keys())))
             by_table.update(missing_by_table)
+            # search for objects inside the objects we just registered
+            next_by_table = self._uuids_by_table(missing, cache,
+                                                 get_table_name)
+            for table, uuid_dict in next_by_table.items():
+                by_table[table].update(uuid_dict)
+            old_missing = missing
+
+        # TODO: move to function self.store_sfr_results(by_table)
+        self.save_function_results()  # always for canonical
+        has_sfr = (self.class_info.sfr_info is not None
+                   and self.class_info.sfr_info.table in by_table)
+        if has_sfr:
+            func_results = by_table.pop(self.class_info.sfr_info.table)
+            logger.info("Saving results from %d storable functions",
+                        len(func_results))
+            for result in func_results.values():
+                func = result.parent
+                self.save_function_results(func)
 
         # TODO: add simulation objects to the cache
 
@@ -214,22 +311,57 @@ class GeneralStorage(object):
             logger.debug("Storing %d objects to table %s",
                          len(by_table[table]), table)
             serialize = self.class_info[table].serializer
-
-            # DEBUG
-            # if table == 'move_changes':
-                # for o in by_table[table].values():
-                    # print o
-                    # serialize(o)
-
             storables_list = [serialize(o) for o in by_table[table].values()]
             self.backend.add_to_table(table, storables_list)
             # special handling for simulation objects
             if table == 'simulation_objects':
                 self._update_pseudo_tables(by_table[table])
                 self._simulation_objects.update(by_table[table])
+                self._reset_fixed_cache()
             logger.debug("Storing complete")
 
-    def load(self, input_uuids, force=False):
+    def save_function_results(self, funcs=None):
+        # TODO: move this to sf_handler; where the equivalent load happens
+
+        # no equivalent load because user has no need -- any loading can be
+        # done by func, either as func(obj) or func.preload_cache()
+        if funcs is None:
+            funcs = list(self._sf_handler.canonical_functions.values())
+
+        funcs = tools.listify(funcs)
+        for func in funcs:
+            # TODO: XXX This is where we need to use type identification
+            # 1. check if the associated function is registered already
+            # 2. if not, extract type from the first function value
+            self._sf_handler.update_cache(func.local_cache)
+            result_dict = func.local_cache.result_dict
+            table_name = get_uuid(func)
+            if not self.backend.has_table(table_name):
+                if result_dict:
+                    example = next(iter(result_dict.values()))
+                else:
+                    example = None
+                self._sf_handler.register_function(func,
+                                                   example_result=example)
+
+            if result_dict:
+                self.backend.add_storable_function_results(
+                    table_name=table_name,
+                    result_dict=result_dict
+                )
+            self._reset_fixed_cache()
+
+    def load(self, input_uuids, allow_lazy=True, force=False):
+        """
+        Parameters
+        ----------
+        input_uuids : List[str]
+        allow_lazy : bool
+            whether to allow lazy proxy objects
+        force : bool
+            force reloading this object even if it is already cached (used
+            for deproxying a lazy proxy object)
+        """
         # loading happens in 4 parts:
         # 1. Get UUIDs that need to be loaded
         # 2. Make lazy-loading proxy objects
@@ -254,9 +386,15 @@ class GeneralStorage(object):
                 get_all_uuids_loading(uuid_list=uuid_list,
                                       backend=self.backend,
                                       schema=self.schema,
-                                      existing_uuids=self.cache)
+                                      existing_uuids=self.cache,
+                                      allow_lazy=allow_lazy)
         logger.debug("Loading %d objects; creating %d lazy proxies",
                      len(to_load), len(lazy_uuids))
+
+        # to_load : List (table rows from backend)
+        # lazy : Set[str] (lazy obj UUIDs)
+        # dependencies : Dict[str, List[str]] (map UUID to contained UUIDs)
+        # uuid_to_table : Dict[str, str] (UUID to table name)
 
         # make lazies
         logger.debug("Identifying classes for %d lazy proxies",
@@ -264,9 +402,6 @@ class GeneralStorage(object):
         lazy_uuid_rows = self.backend.load_uuids_table(lazy_uuids)
         lazies = tools.group_by_function(lazy_uuid_rows,
                                          self.backend.uuid_row_to_table_name)
-        # TODO: replace this with something not based on Serialization
-        # object
-        # new_uuids = self.serialization.make_all_lazies(lazies)
         new_uuids = self.proxy_factory.make_all_lazies(lazies)
 
         # get order and deserialize
@@ -277,7 +412,15 @@ class GeneralStorage(object):
 
         self.cache.update(new_uuids)
         results.update(new_uuids)
-        return [results[uuid] for uuid in input_uuids]
+        new_results = [results[uuid] for uuid in input_uuids]
+
+        # handle special case of storable functions
+        for result in new_results:
+            if isinstance(result, StorableFunction):
+                self._sf_handler.register_function(result)
+
+        return new_results
+
 
     def deserialize_uuids(self, ordered_uuids, uuid_to_table,
                           uuid_to_table_row, new_uuids=None):
@@ -305,7 +448,10 @@ class GeneralStorage(object):
     def _cache_simulation_objects(self):
         # load up all the simulation objects
         try:
-            backend_iter = self.backend.table_iterator('simulation_objects')
+            backend_iter = itertools.chain(
+                self.backend.table_iterator('simulation_objects'),
+                self.backend.table_iterator('storable_functions')
+            )
             sim_obj_uuids = [row.uuid for row in backend_iter]
         except KeyError:
             # TODO: this should probably be a custom error; don't rely on
@@ -316,6 +462,11 @@ class GeneralStorage(object):
         else:
             objs = self.load(sim_obj_uuids)
         return {get_uuid(obj): obj for obj in objs}
+
+    def _reset_fixed_cache(self):
+        self.cache.fixed_cache = {}
+        self.cache.fixed_cache.update(self._simulation_objects)
+        self.cache.fixed_cache.update(self._sf_handler.canonical_functions)
 
     def _update_pseudo_tables(self, simulation_objects):
         # TODO: replace the pseudo_tables code here with a class
@@ -471,7 +622,7 @@ class PseudoTable(abc.MutableSequence):
         self._sequence = []
         self._uuid_to_obj = {}
         self._name_to_uuid = {}
-        sequence = none_to_default(sequence, [])
+        sequence = tools.none_to_default(sequence, [])
         for item in sequence:
             self.append(item)
 
@@ -489,8 +640,8 @@ class PseudoTable(abc.MutableSequence):
     def get_by_uuid(self, uuid):
         return self._uuid_to_obj[uuid]
 
-    # NOTE: index can get confusing because you can have two equal volumes
-    # (same CV, same range) with one named and the other not named.
+    # NOTE: .index() can get confusing because you can have two equal
+    # volumes (same CV, same range) with one named and the other not named.
 
     def __getitem__(self, item):
         try:
