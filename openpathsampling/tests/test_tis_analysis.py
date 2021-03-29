@@ -231,6 +231,55 @@ class TestWeightedTrajectories(TISAnalysisTester):
             assert weighted_trajs[ens_AB[ens]][self.trajs_AB[traj]] == res
             assert weighted_trajs[ens_BA[ens]][self.trajs_BA[traj]] == res
 
+    def test_steps_to_weighted_trajectories_multiensemble_remapping(self):
+        extra_mistis = paths.MISTISNetwork([
+            (self.state_A, self.interfaces_AB, self.state_B),
+            (self.state_B, self.interfaces_BA, self.state_A)
+        ])
+        effective_mistis = paths.MISTISNetwork([
+            (self.state_A, self.interfaces_AB, self.state_B),
+            (self.state_B, self.interfaces_BA, self.state_A)
+        ])
+        ensemble_remapping = {sampling: effective
+                              for sampling, effective in zip(
+                                  self.mistis.sampling_ensembles,
+                                  effective_mistis.sampling_ensembles
+                              )}
+        ensemble_remapping.update({
+            sampling: effective
+            for sampling, effective in zip(
+                extra_mistis.sampling_ensembles,
+                effective_mistis.sampling_ensembles
+            )
+        })
+
+        mover_stub = MoverWithSignature(extra_mistis.all_ensembles,
+                                        extra_mistis.all_ensembles)
+        sample_sets = [paths.SampleSet([
+            paths.Sample(trajectory=self.trajs_AB[0],
+                            replica=0,
+                            ensemble=extra_mistis.sampling_ensembles[0])
+        ])]
+        extra_steps = self._make_fake_steps(sample_sets, mover_stub)
+        steps = self.mistis_steps + extra_steps
+        weighted_trajs = steps_to_weighted_trajectories(
+            steps,
+            ensembles=None,
+            ensemble_remapping=ensemble_remapping
+        )
+        AB = effective_mistis.transitions[(self.state_A, self.state_B)]
+        BA = effective_mistis.transitions[(self.state_B, self.state_A)]
+        ens_AB = [effective_mistis.sampling_ensemble_for[ens]
+                  for ens in AB.ensembles]
+        ens_BA = [effective_mistis.sampling_ensemble_for[ens]
+                  for ens in BA.ensembles]
+        # NOTE: here (0, 0) is 3, not 2: we added an extra step associated
+        # with the extra ensemble
+        results = {(0, 0): 3, (0, 1): 1, (0, 2): 1, (0, 3): 0,
+                   (1, 0): 0, (1, 1): 2, (1, 2): 1, (1, 3): 1,
+                   (2, 0): 0, (2, 1): 0, (2, 2): 2, (2, 3): 2}
+        for ((ens, traj), res) in results.items():
+            assert weighted_trajs[ens_AB[ens]][self.trajs_AB[traj]] == res
 
 
 class TestFluxToPandas(TISAnalysisTester):

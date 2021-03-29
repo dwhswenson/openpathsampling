@@ -8,14 +8,15 @@ import numpy as np
 
 def _remap_weighted_trajectories(weighted_trajs, ensemble_remapping):
     shared_keys = collections.defaultdict(list)
-    for sampling_ens, target_ens in ensemble_remapping.items():
-        shared_keys[target_ens].append(sampling_ens)
+    for ens in weighted_trajs:
+        shared_keys[ensemble_remapping[ens]].append(ens)
 
     remapped = {
         target_ens: sum([weighted_trajs[ens] for ens in samp_ensembles],
                         collections.Counter())
         for target_ens, samp_ensembles in shared_keys.items()
     }
+
     return remapped
 
 
