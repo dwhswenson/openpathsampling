@@ -12,6 +12,7 @@ import openpathsampling as paths
 
 import pandas as pd
 import pandas.testing as pdt
+import numpy.testing as npt
 
 import logging
 logging.getLogger('openpathsampling.initialization').setLevel(logging.CRITICAL)
@@ -112,10 +113,10 @@ class TISAnalysisTester(object):
                                              float("-inf"), 0.0).named("A")
         self.state_B = paths.CVDefinedVolume(cv_B,
                                              float("-inf"), 0.0).named("B")
-        interfaces_AB = paths.VolumeInterfaceSet(cv_A, float("-inf"),
-                                                 [0.0, 0.1, 0.2])
-        interfaces_BA = paths.VolumeInterfaceSet(cv_B, float("-inf"),
-                                                 [0.0, 0.1, 0.2])
+        self.interfaces_AB = paths.VolumeInterfaceSet(cv_A, float("-inf"),
+                                                      [0.0, 0.1, 0.2])
+        self.interfaces_BA = paths.VolumeInterfaceSet(cv_B, float("-inf"),
+                                                      [0.0, 0.1, 0.2])
 
         # trajectory that crosses each interface, one state-to-state
         self.trajs_AB = [make_tis_traj_fixed_steps(i) for i in [0, 1, 2]]
@@ -126,11 +127,10 @@ class TISAnalysisTester(object):
                          for i in [0, 1, 2]]
         self.trajs_BA += [make_1d_traj([1.0 - (-0.5 + i) * 0.1
                                         for i in range(12)])]
-
         # set up mistis
         self.mistis = paths.MISTISNetwork([
-            (self.state_A, interfaces_AB, self.state_B),
-            (self.state_B, interfaces_BA, self.state_A)
+            (self.state_A, self.interfaces_AB, self.state_B),
+            (self.state_B, self.interfaces_BA, self.state_A)
         ])
         mover_stub_mistis = MoverWithSignature(self.mistis.all_ensembles,
                                                self.mistis.all_ensembles)
@@ -146,8 +146,8 @@ class TISAnalysisTester(object):
 
         # TODO: set up mstis
         self.mstis = paths.MSTISNetwork([
-            (self.state_A, interfaces_AB),
-            (self.state_B, interfaces_BA)
+            (self.state_A, self.interfaces_AB),
+            (self.state_B, self.interfaces_BA)
         ])
         mover_stub_mstis = MoverWithSignature(self.mstis.all_ensembles,
                                               self.mstis.all_ensembles)
@@ -200,6 +200,37 @@ class TestWeightedTrajectories(TISAnalysisTester):
                      len(self.mstis.sampling_ensembles))
         self._check_network_results(self.mstis,
                                     self.mstis_weighted_trajectories)
+
+    def test_steps_to_weighted_trajectories_remapping(self):
+        new_mistis = paths.MISTISNetwork([
+            (self.state_A, self.interfaces_AB, self.state_B),
+            (self.state_B, self.interfaces_BA, self.state_A)
+        ])
+        ensemble_remapping = {
+            sampling: effective
+            for sampling, effective in zip(self.mistis.sampling_ensembles,
+                                           new_mistis.sampling_ensembles)
+        }
+        weighted_trajs = steps_to_weighted_trajectories(
+            self.mistis_steps,
+            self.mistis.sampling_ensembles,
+            ensemble_remapping
+        )
+        AB = new_mistis.transitions[(self.state_A, self.state_B)]
+        BA = new_mistis.transitions[(self.state_B, self.state_A)]
+        ens_AB = [new_mistis.sampling_ensemble_for[ens]
+                  for ens in AB.ensembles]
+        ens_BA = [new_mistis.sampling_ensemble_for[ens]
+                  for ens in BA.ensembles]
+        # (ensemble_number, trajectory_number): count
+        results = {(0, 0): 2, (0, 1): 1, (0, 2): 1, (0, 3): 0,
+                   (1, 0): 0, (1, 1): 2, (1, 2): 1, (1, 3): 1,
+                   (2, 0): 0, (2, 1): 0, (2, 2): 2, (2, 3): 2}
+
+        for ((ens, traj), res) in results.items():
+            assert weighted_trajs[ens_AB[ens]][self.trajs_AB[traj]] == res
+            assert weighted_trajs[ens_BA[ens]][self.trajs_BA[traj]] == res
+
 
 
 class TestFluxToPandas(TISAnalysisTester):
@@ -896,6 +927,28 @@ class TestTISAnalysis(TISAnalysisTester):
                                 0.0125)
             assert_almost_equal(self.mstis_analysis.rate(vol_1, vol_2),
                                 0.0125)
+
+    def test_ensemble_remapping(self):
+        new_mistis = paths.MISTISNetwork([
+            (self.state_A, self.interfaces_AB, self.state_B),
+            (self.state_B, self.interfaces_BA, self.state_A)
+        ])
+        ensemble_remapping = {
+            sampling: effective
+            for sampling, effective in zip(self.mistis.sampling_ensembles,
+                                           new_mistis.sampling_ensembles)
+        }
+        mistis_analysis = self._make_tis_analysis(new_mistis)
+        mistis_analysis.ensemble_remapping = ensemble_remapping
+        mistis_analysis.calculate(self.mistis_steps)
+        mistis_rate = mistis_analysis.rate_matrix()
+        pairs = [(self.state_A, self.state_B), (self.state_B, self.state_A)]
+        npt.assert_almost_equal(
+            mistis_rate[(self.state_A, self.state_B)], 0.0125
+        )
+        npt.assert_almost_equal(
+            mistis_rate[(self.state_B, self.state_A)], 0.0125
+        )
 
 
 class TestStandardTISAnalysis(TestTISAnalysis):

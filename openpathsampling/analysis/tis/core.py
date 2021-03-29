@@ -6,7 +6,21 @@ import pandas as pd
 import numpy as np
 
 
-def steps_to_weighted_trajectories(steps, ensembles):
+def _remap_weighted_trajectories(weighted_trajs, ensemble_remapping):
+    shared_keys = collections.defaultdict(list)
+    for sampling_ens, target_ens in ensemble_remapping.items():
+        shared_keys[target_ens].append(sampling_ens)
+
+    remapped = {
+        target_ens: sum([weighted_trajs[ens] for ens in samp_ensembles],
+                        collections.Counter())
+        for target_ens, samp_ensembles in shared_keys.items()
+    }
+    return remapped
+
+
+def steps_to_weighted_trajectories(steps, ensembles,
+                                   ensemble_remapping=None):
     """Bare function to convert to the weighted trajs dictionary.
 
     This prepares data for the faster analysis format. This preparation only
@@ -18,27 +32,42 @@ def steps_to_weighted_trajectories(steps, ensembles):
         steps to be analyzed
     ensembles: list of :class:`.Ensemble`
         ensembles to include in the list. Note: ensemble must be given!
+    ensemble_remapping: Mapping[:class:.`Ensemble`, :class:`.Ensemble`]
+        mapping to convert the sampled ensemble to an ensemble in
+        ``ensembles``
 
     Returns
     -------
     dict of {:class:`.Ensemble`: collections.Counter}
-        the result, with the ensemble as key, and a counter mapping each
+        The result, with the ensemble as key, and a counter mapping each
         trajectory associated with that ensemble to its counter of time
-        spent in the ensemble.
+        spent in the ensemble. If ``ensemble_remapping`` is given, the
+        ensembles here are the values of that mapping.
     """
-    results = {e: collections.Counter() for e in ensembles}
+    ensembles = None  # TODO: temp
+    if ensembles is not None:
+        results = {e: collections.Counter() for e in ensembles}
+    else:
+        results = collections.defaultdict(collections.Counter)
 
     # loop over blocks # TODO: add blocksize parameter, test various sizes
     block_steps = steps
     block = collections.defaultdict(list)
     for step in block_steps:
-        for ens in ensembles:
-            block[ens].append(step.active[ens].trajectory)
+        for samp in step.active:
+            block[samp.ensemble].append(samp.trajectory)
+        # for ens in ensembles:
+            # block[ens].append(step.active[ens].trajectory)
 
-    block_counter = {e: collections.Counter(block[e]) for e in ensembles}
+    block_counter = {e: collections.Counter(block[e]) for e in block}
 
-    for e in results:
+    for e in block_counter:
         results[e] += block_counter[e]
+
+    results = dict(results)
+
+    if ensemble_remapping is not None:
+        results = _remap_weighted_trajectories(results, ensemble_remapping)
 
     return results
 
@@ -264,6 +293,7 @@ class TISAnalysis(StorableNamedObject):
         self.transitions = network.transitions
         self.flux_method = flux_method
         self.transition_probability_methods = transition_probability_methods
+        self.ensemble_remapping = None
         self.results = {}
 
     def calculate(self, steps):
@@ -280,7 +310,8 @@ class TISAnalysis(StorableNamedObject):
         self.results['flux'] = fluxes
         weighted_trajs = steps_to_weighted_trajectories(
             steps,
-            self.network.sampling_ensembles
+            self.network.sampling_ensembles,
+            self.ensemble_remapping
         )
         self.from_weighted_trajectories(weighted_trajs)
 
