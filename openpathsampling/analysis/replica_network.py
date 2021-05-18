@@ -112,6 +112,7 @@ class ReplicaNetwork(object):
             raise RuntimeError("No steps given to analyze!")
         n_trials = 0
         analysis = {}
+        # TODO: these should be defaultdict
         analysis['n_trials'] = {}
         analysis['n_accepted'] = {}
         prev = None
@@ -166,6 +167,7 @@ class ReplicaNetwork(object):
         ----------
         traces: dict
         """
+        # TODO: this should be defaultdict
         transitions = {}
         for replica in traces:
             trace = traces[replica]
@@ -266,6 +268,7 @@ class ReplicaNetwork(object):
         (n_try, n_acc) = self.analysis
         data = []
         for k in n_try.keys():
+            # TODO: n_acc_k = n_acc.get(k, 0)
             try:
                 n_acc_k = n_acc[k]
             except KeyError:
@@ -495,6 +498,7 @@ class ReplicaNetworkGraph(object):
         normal = []
         msouter = []
         minus = []
+        # TODO: this should be pluggable
         for node in self.graph.nodes():
             if isinstance(node, paths.TISEnsemble):
                 normal.append(node)
@@ -515,6 +519,7 @@ class ReplicaNetworkGraph(object):
 
 # TODO: convert these into functions that do the trace for all
 # replicas/ensembles in one loop
+# TODO: do this all with new analysis methods
 def trace_ensembles_for_replica(replica, steps):
     """
     List of which ensemble a given replica was in at each MC step.
@@ -557,6 +562,7 @@ def trace_replicas_for_ensemble(ensemble, steps):
     return trace
 
 
+# TODO; isn't this something we can do with itertools?
 def condense_repeats(ll, use_is=True):
     """
     Count the number of consecutive repeats in a list.

@@ -1,4 +1,5 @@
 import logging
+from collections import defaultdict, counter
 
 logger = logging.getLogger(__name__)
 
@@ -82,3 +83,47 @@ def minus_sides_summary(trajectory, minus_ensemble):
             local_count = 0
         local_count += count
     return count_sides
+
+def _group_by(objs, key):
+    grouped = defaultdict(list)
+    for sample in samples:
+        grouped[key(sample)].append(sample)
+    return dict(grouped)
+
+def group_by_ensemble(samples):
+    """Create a dictionary mapping ensemble to list of samples.
+
+    Parameters
+    ----------
+    samples : Iterable[:class:`.Sample`]
+
+    Returns
+    -------
+    Dict[:class:`Ensemble`, List[:class:`.Sample`] :
+        dict mapping ensemble to list of samples in that ensemble
+    """
+    return _group_by(samples, key=lambda s: s.ensemble)
+
+def group_by_replica(samples):
+    """Create a dictionary mapping replica to list of samples.
+
+    Parameters
+    ----------
+    samples : Iterable[:class:`.Sample`]
+
+    Returns
+    -------
+    Dict[int, List[:class:`.Sample`] :
+        dict mapping replica to list of samples for that replica
+    """
+    return _group_by(samples, key=lambda s: s.replica)
+
+def weighted_trajectories(steps):
+    # TODO: convert this to:
+    # grouped = group_by_ensembles(ActiveSamples.using(steps=steps)
+    samples = [step.active.samples for step in steps]
+    grouped = group_by_ensemble(samples)
+
+    weighted = {ens: Counter(s.trajectory for s in samples)
+                for ens, samples in grouped.items()}
+    return weighted
