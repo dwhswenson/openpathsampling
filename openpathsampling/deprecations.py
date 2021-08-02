@@ -56,11 +56,10 @@ class Deprecation(object):
             result = result.format(**self.str_replace)
         return result
 
-    def warn(self, stacklevel=2):
+    def warn(self, stacklevel=2, category=DeprecationWarning):
         """Emit a warning for this deprecation."""
         if not (self.has_warned and self.warn_once):
-            warnings.warn(self.message, DeprecationWarning,
-                          stacklevel=stacklevel)
+            warnings.warn(self.message, category, stacklevel=stacklevel)
             self.has_warned = True
 
     def docstring_message(self, style='numpydoc'):
@@ -117,7 +116,21 @@ def version_tuple_to_string(version_tuple):
 
 
 # DEPRECATED THINGS SLATED FOR REMOVAL IN 2.0
+SIMSTORE_NO_SFR_TYPES = Deprecation(
+    problem=("This file is missing stored result types, and will not be "
+             "supported in {OPS} {version}."),
+    remedy=("Add result types to the file. See ???"),
+    remove_version=(2, 0),
+    deprecated_in=(1, 5, 1)
+)
 
+OPENMM_MDTRAJTOPOLOGY = Deprecation(
+                                    problem=("openpathsampling.engines.openmm.topology.MDTrajTopology "
+                                             "has been moved."),
+                                    remedy=("Import MDTrajTopology from openpathsampling.engines instead."),
+                                    remove_version=(2, 0),
+                                    deprecated_in=(1, 5, 0)
+                                    )
 # has_deprecations and deprecate hacks to change docstrings inspired by:
 # https://stackoverflow.com/a/47441572/4205735
 def has_deprecations(cls):
@@ -198,4 +211,3 @@ def print_deprecations(version=None):  # pragma: no cover
     deprecations = list_deprecations(version)
     for dep in deprecations:
         print(dep)
-
